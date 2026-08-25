@@ -172,6 +172,7 @@ class _HomePageState extends State<HomePage> {
         widget.api.albumShop(),
         widget.api.topSongs(),
         widget.api.topAlbums(pageSize: 10),
+        widget.api.recommendedSongCards(),
       ]);
       if (!mounted) return;
       final data = _HomeData(
@@ -180,6 +181,7 @@ class _HomePageState extends State<HomePage> {
         albums: results[2] as List<AlbumShopItem>,
         topSongs: results[3] as List<Song>,
         topAlbums: results[4] as List<TopAlbumItem>,
+        recommendedSongCards: results[5] as List<RecommendedSongCard>,
       );
       _cachedData = data;
       await widget.cache.write('cache_home', {
@@ -188,6 +190,9 @@ class _HomePageState extends State<HomePage> {
         'albums': data.albums.map((a) => a.toCache()).toList(),
         'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
         'topAlbums': data.topAlbums.map(_topAlbumToCache).toList(),
+        'recommendedSongCards': data.recommendedSongCards
+            .map((card) => card.toCache())
+            .toList(),
       });
       if (!mounted) return;
       _checkAndAutoPlay(data);
@@ -206,6 +211,7 @@ class _HomePageState extends State<HomePage> {
       widget.api.albumShop(),
       widget.api.topSongs(),
       widget.api.topAlbums(pageSize: 10),
+      widget.api.recommendedSongCards(),
     ]);
     final data = _HomeData(
       daily: results[0] as DailyRecommend,
@@ -213,6 +219,7 @@ class _HomePageState extends State<HomePage> {
       albums: results[2] as List<AlbumShopItem>,
       topSongs: results[3] as List<Song>,
       topAlbums: results[4] as List<TopAlbumItem>,
+      recommendedSongCards: results[5] as List<RecommendedSongCard>,
     );
     _cachedData = data;
     await widget.cache.write('cache_home', {
@@ -221,6 +228,9 @@ class _HomePageState extends State<HomePage> {
       'albums': data.albums.map((a) => a.toCache()).toList(),
       'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
       'topAlbums': data.topAlbums.map(_topAlbumToCache).toList(),
+      'recommendedSongCards': data.recommendedSongCards
+          .map((card) => card.toCache())
+          .toList(),
     });
     _checkAndAutoPlay(data);
     return data;
@@ -270,6 +280,12 @@ class _HomePageState extends State<HomePage> {
           .whereType<Map<String, dynamic>>()
           .map(_topAlbumFromCache)
           .toList(),
+      recommendedSongCards:
+          (json['recommendedSongCards'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(RecommendedSongCard.fromCache)
+              .where((card) => card.cardId > 0 && card.songs.isNotEmpty)
+              .toList(),
     );
   }
 
@@ -349,6 +365,29 @@ class _HomePageState extends State<HomePage> {
             subtitle: album.singerName,
             coverUrl: album.coverUrl,
           ),
+        ),
+      ),
+    );
+  }
+
+  void _openRecommendedSongCard(RecommendedSongCard card) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlaylistDetailPage(
+          api: widget.api,
+          auth: widget.auth,
+          player: widget.player,
+          playlist: PlaylistSummary(
+            id: 'recommended-card-${card.cardId}',
+            title: card.title,
+            subtitle: card.description?.trim().isNotEmpty == true
+                ? card.description
+                : card.songSummary,
+            coverUrl: card.coverUrl,
+            songCount: card.songs.length,
+          ),
+          initialSongs: card.songs,
+          readOnly: true,
         ),
       ),
     );
@@ -549,6 +588,11 @@ class _HomePageState extends State<HomePage> {
                               _TopAlbumRail(
                                 albums: data.topAlbums,
                                 onTap: _openTopAlbum,
+                              ),
+                            if (data.recommendedSongCards.isNotEmpty)
+                              _RecommendedSongCardRail(
+                                cards: data.recommendedSongCards,
+                                onTap: _openRecommendedSongCard,
                               ),
                           ],
                         ),
@@ -1575,6 +1619,68 @@ class _TopAlbumCard extends StatelessWidget {
   }
 }
 
+/// 探索发现中的 6 组推荐歌曲。
+class _RecommendedSongCardRail extends StatelessWidget {
+  const _RecommendedSongCardRail({required this.cards, required this.onTap});
+
+  final List<RecommendedSongCard> cards;
+  final ValueChanged<RecommendedSongCard> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppHorizontalRail<RecommendedSongCard>(
+      title: '推荐歌曲',
+      items: cards,
+      height: 172,
+      itemWidth: 120,
+      itemBuilder: (context, card) => _RecommendedSongCardTile(
+        card: card,
+        onTap: () => onTap(card),
+      ),
+    );
+  }
+}
+
+class _RecommendedSongCardTile extends StatelessWidget {
+  const _RecommendedSongCardTile({required this.card, required this.onTap});
+
+  final RecommendedSongCard card;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Artwork(url: card.coverUrl, size: 120, borderRadius: AppRadius.md),
+          const SizedBox(height: 6),
+          Text(
+            card.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          Text(
+            card.description?.trim().isNotEmpty == true
+                ? card.description!
+                : card.songSummary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PlaylistRail extends StatefulWidget {
   const _PlaylistRail({required this.playlists, required this.onTap});
 
@@ -2490,6 +2596,7 @@ class _HomeData {
     required this.albums,
     this.topSongs = const [],
     this.topAlbums = const [],
+    this.recommendedSongCards = const [],
   });
 
   final DailyRecommend daily;
@@ -2497,6 +2604,7 @@ class _HomeData {
   final List<AlbumShopItem> albums;
   final List<Song> topSongs;
   final List<TopAlbumItem> topAlbums;
+  final List<RecommendedSongCard> recommendedSongCards;
 }
 
 class _RadioData {

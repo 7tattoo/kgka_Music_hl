@@ -269,6 +269,43 @@ class MusicApi {
         .where((album) => album.id.isNotEmpty)
         .toList();
   }
+
+  /// 探索发现页的 6 组推荐歌曲。
+  ///
+  /// 每组推荐独立降级，单个请求失败不会阻断其他推荐或首页加载。
+  Future<List<RecommendedSongCard>> recommendedSongCards() async {
+    const definitions = <(int, String)>[
+      (1, '私人专属好歌'),
+      (2, '经典怀旧金曲'),
+      (3, '热门好歌精选'),
+      (4, '小众宝藏佳作'),
+      (5, '潮流尝鲜'),
+      (6, 'VIP 专属推荐'),
+    ];
+    final cards = await Future.wait(
+      definitions.map((definition) async {
+        try {
+          final json = asMap(
+            await _client.get('/top/card', {'card_id': definition.$1}),
+          );
+          final card = RecommendedSongCard.fromJson(
+            cardId: definition.$1,
+            title: definition.$2,
+            json: json,
+          );
+          return card.songs.isEmpty ? null : card;
+        } catch (error, stackTrace) {
+          debugPrint(
+            'Failed to load recommended song card ${definition.$1}: $error\n'
+            '$stackTrace',
+          );
+          return null;
+        }
+      }),
+    );
+    return cards.whereType<RecommendedSongCard>().toList();
+  }
+
   Future<List<AlbumShopItem>> albumShop({int page = 1, int pageSize = 30}) async {
     final json = asMap(
       await _client.get('/album/shop', {'page': page, 'pagesize': pageSize}),

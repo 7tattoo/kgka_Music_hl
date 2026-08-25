@@ -35,12 +35,16 @@ class PlaylistDetailPage extends StatefulWidget {
     required this.auth,
     required this.player,
     required this.playlist,
+    this.initialSongs,
+    this.readOnly = false,
   });
 
   final MusicApi api;
   final AuthController auth;
   final PlayerController player;
   final PlaylistSummary playlist;
+  final List<Song>? initialSongs;
+  final bool readOnly;
 
   @override
   State<PlaylistDetailPage> createState() => _PlaylistDetailPageState();
@@ -153,7 +157,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     }
   }
 
-  bool get _isAlbum => widget.playlist.isCollectedAlbum;
+  bool get _isStaticCollection => widget.initialSongs != null;
+
+  bool get _isAlbum =>
+      !_isStaticCollection && widget.playlist.isCollectedAlbum;
 
   @override
   void initState() {
@@ -217,7 +224,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
   /// 加载完整歌单（已加载/正在加载时复用同一个 Future）。
   Future<void> _loadAllSongs() {
-    if (_allSongsLoaded) return Future.value();
+    if (_isStaticCollection || _allSongsLoaded) return Future.value();
     return _allSongsFuture ??= _fetchAllSongs();
   }
 
@@ -421,6 +428,24 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
       _songs.clear();
     });
 
+    if (_isStaticCollection) {
+      final songs = List<Song>.of(widget.initialSongs!);
+      if (!mounted) return;
+      setState(() {
+        _info = widget.playlist;
+        _songs
+          ..clear()
+          ..addAll(songs);
+        _isInitialLoading = false;
+        _allSongsLoaded = true;
+        _hasMore = false;
+      });
+      if (widget.player.currentSong != null) {
+        unawaited(_autoLocateCurrentSong());
+      }
+      return;
+    }
+
     final cacheKey = _isAlbum
         ? 'cache_album_${widget.playlist.albumId ?? widget.playlist.id}'
         : 'cache_playlist_${widget.playlist.id}';
@@ -535,6 +560,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
 
   /// 加载相似歌单（增强展示，失败静默忽略）。
   Future<void> _loadSimilarPlaylists() async {
+    if (_isStaticCollection) return;
     try {
       final similar = await widget.api.similarPlaylists(widget.playlist.id);
       if (!mounted || similar.isEmpty) return;
@@ -734,9 +760,11 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
     return widget.auth.findUserPlaylist(_currentPlaylist) ?? _currentPlaylist;
   }
 
-  bool get _isInLibrary => widget.auth.isPlaylistInLibrary(_currentPlaylist);
+  bool get _isInLibrary =>
+      !widget.readOnly && widget.auth.isPlaylistInLibrary(_currentPlaylist);
 
-  bool get _canEdit => widget.auth.canEditPlaylist(_currentPlaylist);
+  bool get _canEdit =>
+      !widget.readOnly && widget.auth.canEditPlaylist(_currentPlaylist);
 
   Future<void> _collectPlaylist() async {
     if (_isAlbum) return;
@@ -1053,15 +1081,16 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                       onPressed: _sharePlaylist,
                       icon: const Icon(Icons.share_rounded),
                     ),
-                    IconButton(
-                      tooltip: '导入歌单',
-                      onPressed: () => showImportPlaylistSheet(
-                        context: context,
-                        api: widget.api,
-                        auth: widget.auth,
+                    if (!widget.readOnly)
+                      IconButton(
+                        tooltip: '导入歌单',
+                        onPressed: () => showImportPlaylistSheet(
+                          context: context,
+                          api: widget.api,
+                          auth: widget.auth,
+                        ),
+                        icon: const Icon(Icons.playlist_add_rounded),
                       ),
-                      icon: const Icon(Icons.playlist_add_rounded),
-                    ),
                     if (_isMutating)
                       const Padding(
                         padding: EdgeInsets.only(right: 16),
@@ -1072,8 +1101,10 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                           ),
                         ),
                       )
-                    else if ((!_isAlbum && !_isInLibrary) ||
-                        (_isInLibrary && !_libraryPlaylist.isLikedPlaylist))
+                    else if (!widget.readOnly &&
+                        ((!_isAlbum && !_isInLibrary) ||
+                            (_isInLibrary &&
+                                !_libraryPlaylist.isLikedPlaylist)))
                       IconButton(
                         tooltip: '更多',
                         onPressed: _showPlaylistActionSheet,
@@ -2122,4 +2153,3 @@ String _playCount(int? value) {
   }
   return '$value 次播放';
 }
-
