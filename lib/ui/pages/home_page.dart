@@ -66,6 +66,10 @@ class _HomePageState extends State<HomePage> {
   var _sectionIndex = 0;
   var _updateBannerDismissed = false;
   var _autoUpdateDialogShown = false;
+  var _isStartingPersonalFm = false;
+  var _isLoadingPersonalFmPreview = false;
+  var _hasRequestedPersonalFmPreview = false;
+  List<Song> _personalFmPreviewSongs = const [];
 
   @override
   void initState() {
@@ -84,6 +88,9 @@ class _HomePageState extends State<HomePage> {
       _tryRestoreFromCache();
     }
     widget.auth.addListener(_handleAuthChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPersonalFmPreview();
+    });
     if (AppUpdateService.isSupportedPlatform) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     }
@@ -104,6 +111,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleAuthChanged() {
+    if (!widget.auth.isRestoring) {
+      if (widget.auth.isLoggedIn) {
+        _loadPersonalFmPreview();
+      } else {
+        _hasRequestedPersonalFmPreview = false;
+        if (_personalFmPreviewSongs.isNotEmpty && mounted) {
+          setState(() => _personalFmPreviewSongs = const []);
+        }
+      }
+    }
     if (widget.auth.isRestoring || !widget.auth.isLoggedIn) {
       return;
     }
@@ -341,6 +358,60 @@ class _HomePageState extends State<HomePage> {
     widget.player.playSong(song, queue: queue);
   }
 
+  Future<void> _loadPersonalFmPreview() async {
+    if (!mounted ||
+        widget.auth.isRestoring ||
+        !widget.auth.isLoggedIn ||
+        _isLoadingPersonalFmPreview ||
+        _hasRequestedPersonalFmPreview) {
+      return;
+    }
+
+    _hasRequestedPersonalFmPreview = true;
+    setState(() => _isLoadingPersonalFmPreview = true);
+    try {
+      final songs = await widget.api.personalFm();
+      if (!mounted || !widget.auth.isLoggedIn) {
+        return;
+      }
+      setState(() => _personalFmPreviewSongs = songs);
+    } catch (_) {
+      _hasRequestedPersonalFmPreview = false;
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingPersonalFmPreview = false);
+      }
+    }
+  }
+
+  Future<void> _startPersonalFm() async {
+    if (widget.player.isPersonalFmActive) {
+      await widget.player.togglePlay();
+      return;
+    }
+    if (_isStartingPersonalFm) {
+      return;
+    }
+    if (!widget.auth.isLoggedIn) {
+      Toast.info('登录后才能使用私人 FM');
+      return;
+    }
+
+    setState(() => _isStartingPersonalFm = true);
+    try {
+      final success = await widget.player.startPersonalFm(
+        initialSongs: _personalFmPreviewSongs,
+      );
+      if (!success) {
+        Toast.error(widget.player.errorMessage ?? '私人 FM 加载失败，请稍后再试');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isStartingPersonalFm = false);
+      }
+    }
+  }
+
   void _openArtist(Song song) {
     final artist = song.artists.firstWhere(
       (a) => a.name.isNotEmpty,
@@ -417,8 +488,7 @@ class _HomePageState extends State<HomePage> {
                 SliverToBoxAdapter(
                   child: _RecommendHeader(
                     auth: widget.auth,
-                    daily: data!.daily,
-                    albums: data.albums,
+                    albums: data!.albums,
                     sectionIndex: _sectionIndex,
                     onSectionChanged: (value) {
                       if (value == -1) {
@@ -428,12 +498,12 @@ class _HomePageState extends State<HomePage> {
                         widget.onTabSwitch?.call(value == 0 ? 1 : 2);
                       }
                     },
-                    onDailyPlay: () {
-                      final songs = data.daily.songs;
-                      if (songs.isNotEmpty) {
-                        widget.player.playSong(songs.first, queue: songs);
-                      }
-                    },
+                    onPersonalFmPlay: _startPersonalFm,
+                    isPersonalFmLoading:
+                        _isStartingPersonalFm || _isLoadingPersonalFmPreview,
+                    personalFmPreviewSong: _personalFmPreviewSongs.isEmpty
+                        ? null
+                        : _personalFmPreviewSongs.first,
                     onAlbumTap: _openAlbumShop,
                     api: widget.api,
                     player: widget.player,
@@ -506,11 +576,12 @@ class _HomePageState extends State<HomePage> {
 class _RecommendHeader extends StatelessWidget {
   const _RecommendHeader({
     required this.auth,
-    required this.daily,
     required this.albums,
     required this.sectionIndex,
     required this.onSectionChanged,
-    required this.onDailyPlay,
+    required this.onPersonalFmPlay,
+    required this.isPersonalFmLoading,
+    required this.personalFmPreviewSong,
     required this.onAlbumTap,
     required this.api,
     required this.player,
@@ -521,11 +592,12 @@ class _RecommendHeader extends StatelessWidget {
   });
 
   final AuthController auth;
-  final DailyRecommend daily;
   final List<AlbumShopItem> albums;
   final int sectionIndex;
   final ValueChanged<int> onSectionChanged;
-  final VoidCallback onDailyPlay;
+  final VoidCallback onPersonalFmPlay;
+  final bool isPersonalFmLoading;
+  final Song? personalFmPreviewSong;
   final VoidCallback onAlbumTap;
   final MusicApi api;
   final PlayerController player;
@@ -602,9 +674,11 @@ class _RecommendHeader extends StatelessWidget {
                       Expanded(
                         flex: 6,
                         child: _FeatureShelf(
-                          daily: daily,
                           albums: albums,
-                          onDailyPlay: onDailyPlay,
+                          player: player,
+                          onPersonalFmPlay: onPersonalFmPlay,
+                          isPersonalFmLoading: isPersonalFmLoading,
+                          personalFmPreviewSong: personalFmPreviewSong,
                           onAlbumTap: onAlbumTap,
                         ),
                       ),
@@ -622,9 +696,11 @@ class _RecommendHeader extends StatelessWidget {
                   )
                 else ...[
                   _FeatureShelf(
-                    daily: daily,
                     albums: albums,
-                    onDailyPlay: onDailyPlay,
+                    player: player,
+                    onPersonalFmPlay: onPersonalFmPlay,
+                    isPersonalFmLoading: isPersonalFmLoading,
+                    personalFmPreviewSong: personalFmPreviewSong,
                     onAlbumTap: onAlbumTap,
                   ),
                   if (isCarMode)
@@ -798,15 +874,19 @@ class _SmartSearch extends StatelessWidget {
 
 class _FeatureShelf extends StatelessWidget {
   const _FeatureShelf({
-    required this.daily,
     required this.albums,
-    required this.onDailyPlay,
+    required this.player,
+    required this.onPersonalFmPlay,
+    required this.isPersonalFmLoading,
+    required this.personalFmPreviewSong,
     required this.onAlbumTap,
   });
 
-  final DailyRecommend daily;
   final List<AlbumShopItem> albums;
-  final VoidCallback onDailyPlay;
+  final PlayerController player;
+  final VoidCallback onPersonalFmPlay;
+  final bool isPersonalFmLoading;
+  final Song? personalFmPreviewSong;
   final VoidCallback onAlbumTap;
 
   @override
@@ -821,16 +901,29 @@ class _FeatureShelf extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: _FeatureCard(
-                    title: '猜你喜欢',
-                    subtitle: daily.songs.isEmpty
-                        ? '献给此刻迈步的你'
-                        : daily.songs.first.title,
-                    imageUrl: daily.songs.isEmpty
-                        ? daily.coverUrl
-                        : daily.songs.first.coverUrl,
-                    gradient: const [Color(0xFFFFD88E), Color(0xFFFF8DA2)],
-                    onTap: onDailyPlay,
+                  child: AnimatedBuilder(
+                    animation: player,
+                    builder: (context, _) {
+                      final currentFmSong = player.isPersonalFmActive
+                          ? player.currentSong
+                          : personalFmPreviewSong;
+                      return _FeatureCard(
+                        title: '猜你喜欢',
+                        subtitle: currentFmSong?.title ??
+                            '红心 Radio · 根据口味',
+                        imageUrl: currentFmSong?.coverUrl,
+                        gradient: const [
+                          Color(0xFFFFD88E),
+                          Color(0xFFFF8DA2),
+                        ],
+                        onTap: onPersonalFmPlay,
+                        loading: isPersonalFmLoading ||
+                            player.isLoadingPersonalFm,
+                        icon: player.isPersonalFmActive && player.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -874,6 +967,8 @@ class _FeatureCard extends StatelessWidget {
     required this.imageUrl,
     required this.gradient,
     required this.onTap,
+    this.loading = false,
+    this.icon = Icons.play_arrow_rounded,
   });
 
   final String title;
@@ -881,12 +976,14 @@ class _FeatureCard extends StatelessWidget {
   final String? imageUrl;
   final List<Color> gradient;
   final VoidCallback onTap;
+  final bool loading;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+      onTap: loading ? null : onTap,
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: gradient),
@@ -921,11 +1018,19 @@ class _FeatureCard extends StatelessWidget {
               Positioned(
                 right: 14,
                 bottom: 13,
-                child: Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white.withValues(alpha: .94),
-                  size: 32,
-                ),
+                child: loading
+                    ? const SizedBox.square(
+                        dimension: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(
+                        icon,
+                        color: Colors.white.withValues(alpha: .94),
+                        size: 32,
+                      ),
               ),
               Padding(
                 padding: const EdgeInsets.all(14),

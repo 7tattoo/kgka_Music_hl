@@ -205,6 +205,44 @@ class MusicApi {
     return DailyRecommend.fromJson(json);
   }
 
+  /// 获取红心 Radio + 根据口味的私人 FM 推荐。
+  Future<List<Song>> personalFm({
+    String? hash,
+    String? songId,
+    int? playtime,
+    bool isOverplay = false,
+  }) async {
+    final hasPlaybackFeedback =
+        hash != null || songId != null || playtime != null;
+    final raw = await _client.get('/personal/fm', {
+      'mode': 'normal',
+      'songPoolId': 0,
+      if (hasPlaybackFeedback) ...{
+        'hash': hash,
+        'songid': songId,
+        'playtime': playtime,
+        'action': 'play',
+        'isOverplay': isOverplay,
+        'remainSongCnt': 0,
+      },
+    });
+    final json = asMap(raw);
+    final songs = <Song>[];
+    final identities = <String>{};
+    for (final item in asList(json['song_list']).whereType<Map>()) {
+      final song = Song.fromPersonalFm(asMap(item));
+      final identity = song.hash.isNotEmpty ? song.hash : song.id;
+      if (identity.isEmpty || !identities.add(identity)) {
+        continue;
+      }
+      songs.add(song);
+      if (songs.length == 5) {
+        break;
+      }
+    }
+    return songs;
+  }
+
   /// 新歌速递。
   Future<List<Song>> topSongs({int type = 21608, int page = 1}) async {
     final raw = await _client.get('/top/song', {'type': type, 'page': page});

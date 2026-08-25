@@ -574,6 +574,26 @@ class Song {
     );
   }
 
+  factory Song.fromPersonalFm(Map<String, dynamic> json) {
+    final songId = asString(json['songid']);
+    final mixSongId = asString(json['mixsongid']);
+    final authorName = asString(json['author_name']);
+    final artists = parseArtists(json, fallbackName: authorName);
+    final artistName = artists.map((artist) => artist.name).join(' / ');
+    final transParam = asMap(json['trans_param']);
+    return Song(
+      id: mixSongId ?? songId ?? asString(json['hash']) ?? '',
+      title: asString(json['songname']) ?? '未知歌曲',
+      artist: artistName.isNotEmpty ? artistName : authorName ?? '未知艺人',
+      hash: asString(json['hash']) ?? '',
+      albumId: asString(json['album_id']),
+      albumAudioId: songId ?? mixSongId,
+      coverUrl: normalizeImageUrl(asString(transParam['union_cover'])),
+      artists: artists,
+      duration: durationFromSeconds(json['time_length']),
+    );
+  }
+
   factory Song.fromPlaylist(Map<String, dynamic> json) {
     final artists = parseArtists(json);
     final artist = artists.map((artist) => artist.name).join(' / ');
