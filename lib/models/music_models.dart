@@ -565,7 +565,8 @@ class Song {
       albumName: asString(json['album_name']),
       coverUrl: normalizeImageUrl(asString(json['sizable_cover'])),
       artists: artists,
-      duration: durationFromSeconds(json['time_length']),
+      // /top/card 的 time_length 是带小数的秒数（如 259.16）。
+      duration: durationFromTopCardSeconds(json['time_length']),
     );
   }
 
@@ -1779,6 +1780,18 @@ Map<String, dynamic> asMap(Object? value) {
 Duration? durationFromSeconds(Object? value) {
   final seconds = asInt(value);
   return seconds == null ? null : Duration(seconds: seconds);
+}
+
+Duration? durationFromTopCardSeconds(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  final seconds = value is num
+      ? value.toDouble()
+      : double.tryParse(value.toString());
+  return seconds == null
+      ? null
+      : Duration(milliseconds: (seconds * 1000).round());
 }
 
 Duration? durationFromMilliseconds(Object? value) {
