@@ -648,13 +648,16 @@ class MusicApi {
   Future<PlayUrl> songUrl(
     Song song, {
     AudioQuality quality = AudioQuality.standard,
+    bool hashOnly = false,
   }) async {
     final json = asMap(
       await _client.get('/song/url', {
         'hash': song.hash,
         'quality': quality.apiValue,
-        'album_id': song.albumId,
-        'album_audio_id': song.albumAudioId,
+        if (!hashOnly) ...{
+          'album_id': song.albumId,
+          'album_audio_id': song.albumAudioId,
+        },
         'free_part': false,
       }),
     );

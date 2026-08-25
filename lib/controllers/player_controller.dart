@@ -303,6 +303,10 @@ class PlayerController extends ChangeNotifier {
     if (song == null) {
       return -1;
     }
+    final identicalIndex = queue.indexWhere((item) => identical(item, song));
+    if (identicalIndex >= 0) {
+      return identicalIndex;
+    }
     return queue.indexWhere((item) => item.hash == song.hash);
   }
 
@@ -515,21 +519,33 @@ class PlayerController extends ChangeNotifier {
     }
 
     try {
-      final playUrl = await _api.songUrl(song, quality: audioQuality);
+      final playUrl = await _api.songUrl(
+        song,
+        quality: audioQuality,
+        hashOnly: _isPersonalFmActive,
+      );
       if (playUrl.url.isNotEmpty || !smartQualityEnabled) {
         return playUrl;
       }
       // 返回空地址：按智能音质策略降级重试
       final fallback = _nextLowerQuality(audioQuality);
       if (fallback == null) return playUrl;
-      return _api.songUrl(song, quality: fallback);
+      return _api.songUrl(
+        song,
+        quality: fallback,
+        hashOnly: _isPersonalFmActive,
+      );
     } catch (error) {
       if (!smartQualityEnabled) rethrow;
       // 网络请求失败：尝试降级重试
       final fallback = _nextLowerQuality(audioQuality);
       if (fallback == null) rethrow;
       try {
-        final retryUrl = await _api.songUrl(song, quality: fallback);
+        final retryUrl = await _api.songUrl(
+          song,
+          quality: fallback,
+          hashOnly: _isPersonalFmActive,
+        );
         if (retryUrl.url.isNotEmpty) {
           debugPrint(
             '[KA Music][smart-quality] ${audioQuality.badge} 失败，'
@@ -1099,7 +1115,11 @@ class PlayerController extends ChangeNotifier {
             hash: song.hash,
           );
         } else {
-          playUrl = await _api.songUrl(song, quality: audioQuality);
+          playUrl = await _api.songUrl(
+            song,
+            quality: audioQuality,
+            hashOnly: _isPersonalFmActive,
+          );
         }
         if (playUrl.url.isEmpty) {
           throw Exception('当前音质暂时没有可播放地址');
@@ -1804,9 +1824,9 @@ class PlayerController extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      final incoming = await _api.personalFm(
+      var incoming = await _api.personalFm(
         hash: song.hash.isEmpty ? null : song.hash,
-        songId: song.albumAudioId ?? (song.id.isEmpty ? null : song.id),
+        songId: song.id.isEmpty ? null : song.id,
         playtime: smoothPosition.inSeconds,
         isOverplay: isOverplay,
       );
@@ -1817,20 +1837,16 @@ class PlayerController extends ChangeNotifier {
         return;
       }
 
-      final identities = queue
-          .map(_songIdentity)
-          .where((id) => id.isNotEmpty)
-          .toSet();
-      final additions = <Song>[];
-      for (final candidate in incoming) {
-        final identity = _songIdentity(candidate);
-        if (identity.isEmpty || !identities.add(identity)) {
-          continue;
+      var additions = _personalFmAdditions(incoming, song);
+      if (additions.isEmpty) {
+        incoming = await _api.personalFm();
+        if (requestSerial != _personalFmRequestSerial ||
+            !_isPersonalFmActive ||
+            currentSong != song ||
+            !_isAtQueueEnd) {
+          return;
         }
-        additions.add(candidate);
-        if (additions.length == 5) {
-          break;
-        }
+        additions = _personalFmAdditions(incoming, song);
       }
       if (additions.isEmpty) {
         errorMessage = '私人 FM 暂时没有新的推荐歌曲';
@@ -1863,6 +1879,17 @@ class PlayerController extends ChangeNotifier {
       return 'audio:${song.albumAudioId}';
     }
     return song.id.isEmpty ? '' : 'id:${song.id}';
+  }
+
+  List<Song> _personalFmAdditions(List<Song> incoming, Song current) {
+    final currentIdentity = _songIdentity(current);
+    return incoming
+        .where((song) {
+          final identity = _songIdentity(song);
+          return identity.isNotEmpty && identity != currentIdentity;
+        })
+        .take(5)
+        .toList();
   }
 
   @override

@@ -605,12 +605,12 @@ class Song {
     final artistName = artists.map((artist) => artist.name).join(' / ');
     final transParam = asMap(json['trans_param']);
     return Song(
-      id: mixSongId ?? songId ?? asString(json['hash']) ?? '',
+      id: songId ?? mixSongId ?? asString(json['hash']) ?? '',
       title: asString(json['songname']) ?? '未知歌曲',
       artist: artistName.isNotEmpty ? artistName : authorName ?? '未知艺人',
       hash: asString(json['hash']) ?? '',
       albumId: asString(json['album_id']),
-      albumAudioId: songId ?? mixSongId,
+      albumAudioId: mixSongId ?? songId,
       coverUrl: normalizeImageUrl(asString(transParam['union_cover'])),
       artists: artists,
       duration: durationFromSeconds(json['time_length']),

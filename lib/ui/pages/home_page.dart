@@ -294,7 +294,10 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _future = future;
     });
-    await future;
+    final fmFuture = !widget.player.isPersonalFmActive
+        ? _loadPersonalFmPreview(force: true)
+        : Future<void>.value();
+    await Future.wait([future, fmFuture]);
   }
 
   Future<void> _checkForUpdates() async {
@@ -397,7 +400,10 @@ class _HomePageState extends State<HomePage> {
     widget.player.playSong(song, queue: queue);
   }
 
-  Future<void> _loadPersonalFmPreview() async {
+  Future<void> _loadPersonalFmPreview({bool force = false}) async {
+    if (force) {
+      _hasRequestedPersonalFmPreview = false;
+    }
     if (!mounted ||
         widget.auth.isRestoring ||
         !widget.auth.isLoggedIn ||
