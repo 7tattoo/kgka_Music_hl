@@ -261,7 +261,8 @@ class MainActivity : AudioServiceActivity() {
                     val hasLyrics = call.argument<Boolean>("hasLyrics") ?: false
                     val title = call.argument<String>("title") ?: ""
                     val artist = call.argument<String>("artist") ?: ""
-                    CarLyricsManager.updateLyrics(currentLine, wholeLrc, hasLyrics, title, artist)
+                    val mediaId = call.argument<String>("mediaId") ?: ""
+                    CarLyricsManager.updateLyrics(currentLine, wholeLrc, hasLyrics, title, artist, mediaId)
                     result.success(null)
                 }
                 "clearLyrics" -> {

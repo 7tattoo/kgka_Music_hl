@@ -18,6 +18,7 @@ class CarLyricsService {
     required bool hasLyrics,
     String title = '',
     String artist = '',
+    String mediaId = '',
   }) async {
     try {
       await _channel.invokeMethod('updateLyrics', {
@@ -26,6 +27,7 @@ class CarLyricsService {
         'hasLyrics': hasLyrics,
         'title': title,
         'artist': artist,
+        'mediaId': mediaId,
       });
     } catch (e) {
       if (kDebugMode) {

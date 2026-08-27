@@ -1303,6 +1303,7 @@ class PlayerController extends ChangeNotifier {
         hasLyrics: true,
         title: currentSong?.title ?? '',
         artist: currentSong?.artist ?? '',
+        mediaId: currentSong == null ? '' : (currentSong!.hash.isNotEmpty ? currentSong!.hash : currentSong!.id),
       ));
     }
   }

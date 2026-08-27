@@ -29,6 +29,7 @@ object CarLyricsManager {
 
     private var cachedTitle: String = ""
     private var cachedArtist: String = ""
+    private var lastMediaId: String = ""
 
     private fun getSession(): Any? {
         return try {
@@ -46,12 +47,17 @@ object CarLyricsManager {
     }
 
     private fun getMetadataBuilderClass(): Class<*>? {
-        return try {
-            Class.forName("androidx.media.common.MediaMetadataCompat\$Builder")
-        } catch (e: Exception) {
-            Log.w(TAG, "MediaMetadataCompat.Builder not found: ${e.message}")
-            null
+        // audio_service 使用 android.support.v4.media.MediaMetadataCompat（Google 在 AndroidX 下保留该包名）
+        for (name in listOf(
+            "android.support.v4.media.MediaMetadataCompat\$Builder",
+            "androidx.media.common.MediaMetadataCompat\$Builder"
+        )) {
+            try {
+                return Class.forName(name)
+            } catch (_: Exception) {}
         }
+        Log.w(TAG, "MediaMetadataCompat.Builder not found")
+        return null
     }
 
     fun updateLyrics(
@@ -59,7 +65,8 @@ object CarLyricsManager {
         wholeLrc: String,
         hasLyrics: Boolean,
         title: String = "",
-        artist: String = ""
+        artist: String = "",
+        mediaId: String = ""
     ) {
         val session = getSession()
         if (session == null) {
@@ -68,6 +75,7 @@ object CarLyricsManager {
         }
         if (title.isNotEmpty()) cachedTitle = title
         if (artist.isNotEmpty()) cachedArtist = artist
+        if (mediaId.isNotEmpty()) lastMediaId = mediaId
 
         // ---- Channel A: Metadata ----
         try {
@@ -111,7 +119,7 @@ object CarLyricsManager {
                 }
                 putBoolean(EXTRAS_KEY_NOTICE_CAR, true)
                 putString(VIVO_ACTION_KEY, VIVO_ACTION_LRC_CHANGE)
-                putString(VIVO_MEDIA_ID_KEY, "")
+                putString(VIVO_MEDIA_ID_KEY, lastMediaId)
                 if (hasLyrics && wholeLrc.isNotEmpty()) {
                     putString(VIVO_LYRIC_KEY, wholeLrc)
                 }
