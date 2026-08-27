@@ -6,6 +6,10 @@ on:
       - 'v*'
   workflow_dispatch:
 
+# 需要写权限才能创建 GitHub Release
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Android APK
