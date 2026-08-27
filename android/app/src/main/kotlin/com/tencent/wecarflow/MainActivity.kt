@@ -1,4 +1,4 @@
-package com.hoilai.mm.music
+package com.tencent.wecarflow
 
 import android.Manifest
 import android.app.DownloadManager
@@ -31,6 +31,7 @@ class MainActivity : AudioServiceActivity() {
     private var downloadReceiverRegistered = false
     private var lyricsStateReceiverRegistered = false
     private var desktopLyricsChannel: MethodChannel? = null
+    private var carLyricsChannel: MethodChannel? = null
     private var bassBoost: BassBoost? = null
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
@@ -246,6 +247,29 @@ class MainActivity : AudioServiceActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "kgka_music_hl/desktop_lyrics"
         )
+        
+        // 车载歌词 MethodChannel
+        carLyricsChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.tencent.wecarflow/car_lyrics"
+        )
+        carLyricsChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "updateLyrics" -> {
+                    val currentLine = call.argument<String>("currentLine") ?: ""
+                    val wholeLrc = call.argument<String>("wholeLrc") ?: ""
+                    val hasLyrics = call.argument<Boolean>("hasLyrics") ?: false
+                    CarLyricsManager.updateLyrics(currentLine, wholeLrc, hasLyrics)
+                    result.success(null)
+                }
+                "clearLyrics" -> {
+                    CarLyricsManager.clearLyrics()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+        
         registerLyricsStateReceiver()
         desktopLyricsChannel?.setMethodCallHandler { call, result ->
                 when (call.method) {

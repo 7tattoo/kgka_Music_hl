@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/music_models.dart';
 import '../services/audio_effects_service.dart';
 import '../services/cache_service.dart';
+import '../services/car_lyrics_service.dart';
 import '../services/desktop_lyrics_service.dart';
 import '../services/music_api.dart';
 import '../services/music_audio_handler.dart';
@@ -109,6 +110,7 @@ class PlayerController extends ChangeNotifier {
       _maybeCompleteFromPosition(value);
       _maybeStopClimaxPreview(value);
       _maybeSyncDesktopLyricFromPosition();
+      _syncCarLyricsFromPosition();
       notifyListeners();
     });
     // Send timing anchors; Android animates karaoke progress at display refresh.
@@ -1265,6 +1267,42 @@ class PlayerController extends ChangeNotifier {
     }
     // Karaoke progress for current line
     _syncDesktopKaraokeProgress();
+  }
+
+  // ---- vivo 智能车载歌词同步 ----
+  int _lastCarLyricIndex = -2; // -2 表示初始未同步状态
+
+  /// 将歌词列表转换为 LRC 格式字符串
+  String _lyricsToLrc() {
+    if (lyrics.isEmpty) return '';
+    final buf = StringBuffer();
+    for (final line in lyrics) {
+      if (line.text.trim().isEmpty) continue;
+      final ms = line.time.inMilliseconds;
+      final m = (ms ~/ 60000).clamp(0, 99);
+      final s = ((ms % 60000) ~/ 1000).clamp(0, 59);
+      final cs = ((ms % 1000) ~/ 10).clamp(0, 99);
+      buf.write('[${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}.${cs.toString().padLeft(2, '0')}]');
+      buf.writeln(line.text);
+    }
+    return buf.toString();
+  }
+
+  void _syncCarLyricsFromPosition() {
+    if (lyrics.isEmpty) return;
+    final index = activeLyricIndex;
+    if (index != _lastCarLyricIndex) {
+      _lastCarLyricIndex = index;
+      final currentLine = lyrics.isNotEmpty && index >= 0
+          ? lyrics[index.clamp(0, lyrics.length - 1)].text
+          : '';
+      final wholeLrc = _lyricsToLrc();
+      unawaited(CarLyricsService.updateLyrics(
+        currentLine: currentLine,
+        wholeLrc: wholeLrc,
+        hasLyrics: true,
+      ));
+    }
   }
 
   void _syncDesktopKaraokeProgress() {

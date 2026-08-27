@@ -1,0 +1,82 @@
+name: Build Android Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Setup signing config
+        run: |
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" > android/key.properties
+          echo "storePassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=release.jks" >> android/key.properties
+
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE }}" | base64 -d > android/app/release.jks
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Build App Bundle
+        run: flutter build appbundle --release
+
+      - name: Rename APK
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk MeloX-Android-${{ github.ref_name }}.apk
+
+      - name: Rename App Bundle
+        run: |
+          cp build/app/outputs/bundle/release/app-release.aab MeloX-Android-${{ github.ref_name }}.aab
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            MeloX-Android-*.apk
+            MeloX-Android-*.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MeloX-Android-APK
+          path: MeloX-Android-*.apk
+          retention-days: 30
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MeloX-Android-AAB
+          path: MeloX-Android-*.aab
+          retention-days: 30
