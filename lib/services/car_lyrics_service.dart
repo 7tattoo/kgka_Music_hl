@@ -10,16 +10,22 @@ class CarLyricsService {
   /// [currentLine] 当前行歌词
   /// [wholeLrc] 完整 LRC 格式歌词
   /// [hasLyrics] 是否有歌词
+  /// [title] 歌曲标题（用于恢复车机卡片歌名显示）
+  /// [artist] 歌曲艺术家
   static Future<void> updateLyrics({
     required String currentLine,
     required String wholeLrc,
     required bool hasLyrics,
+    String title = '',
+    String artist = '',
   }) async {
     try {
       await _channel.invokeMethod('updateLyrics', {
         'currentLine': currentLine,
         'wholeLrc': wholeLrc,
         'hasLyrics': hasLyrics,
+        'title': title,
+        'artist': artist,
       });
     } catch (e) {
       if (kDebugMode) {

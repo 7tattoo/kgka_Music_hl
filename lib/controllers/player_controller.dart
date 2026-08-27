@@ -1301,6 +1301,8 @@ class PlayerController extends ChangeNotifier {
         currentLine: currentLine,
         wholeLrc: wholeLrc,
         hasLyrics: true,
+        title: currentSong?.title ?? '',
+        artist: currentSong?.artist ?? '',
       ));
     }
   }
