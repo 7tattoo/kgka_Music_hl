@@ -48,7 +48,13 @@ android {
         applicationId = "com.hoilai.mm.music"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // 不能用 flutter.minSdkVersion（CI 的 Flutter 3.47.1 解析为 24）：
+        // 车载歌词依赖 SuperLyricApi 3.4 的 AAR 清单声明 minSdk 26（Android 8.0），
+        // 低于 26 会在 Manifest 合并阶段直接失败：
+        //   "uses-sdk:minSdkVersion 24 cannot be smaller than version 26 declared
+        //    in library com.github.HChenX:SuperLyricApi"
+        // Android 8.0（2017 年发布）覆盖 99%+ 活跃设备，直接提到 26。
+        minSdk = 26
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -72,6 +78,21 @@ android {
                 abiFilters.clear()
                 abiFilters.add("arm64-v8a")
             }
+            isMinifyEnabled = false
+            // Flutter Gradle 插件在 apply 阶段（早于本脚本体执行）会默认打开
+            // release.shrinkResources = true（见 FlutterPluginUtils.shouldShrinkResources，
+            // 无 -Pshrink 属性时恒为 true）。如果我们只关 minify 而不关 shrinkResources，
+            // AGP 配置期会直接报错：
+            //   "Removing unused resources requires unused code shrinking to be turned on"
+            // 因此必须成对显式关闭。
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            isMinifyEnabled = false
         }
     }
 }
@@ -81,6 +102,28 @@ kotlin {
     }
 }
 
+
+// === 依赖解析策略：对 JitPack 等按需构建的仓库不缓存失败结果，确保一次冷启动失败后
+// 等若干秒再次构建时能重新尝试拉取（而不是被 Gradle 本地缓存的 "404 / module not found"
+// 结果一直挡住）。
+configurations.all {
+    resolutionStrategy {
+        // changing 模块（例如 JitPack 的版本号固定但 artifact 是懒构建）不缓存
+        cacheChangingModulesFor(0, "seconds")
+        // 动态版本（1.+、[1.0, 2.0) 等）不缓存，本项目未用，保留默认即可。
+    }
+}
+
+dependencies {
+    // SuperLyricApi（https://github.com/HChenX/SuperLyricApi 3.4）
+    // AAR 通过 JitPack 发布。JitPack 是"首次请求时才在服务器端懒构建"，
+    // 所以把该依赖标记为 `changing = true`，配合上面的
+    // `cacheChangingModulesFor(0 seconds)` 让 Gradle 不会永远缓存首次 404。
+    // 同时在 CI workflow 里做了 JitPack 冷启动失败 → sleep 90s → 重试的兜底。
+    implementation("com.github.HChenX:SuperLyricApi:3.4") {
+        isChanging = true
+    }
+}
 
 flutter {
     source = "../.."

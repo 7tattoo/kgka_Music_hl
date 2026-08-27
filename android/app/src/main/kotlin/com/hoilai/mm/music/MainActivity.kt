@@ -11,9 +11,11 @@ import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
+import android.util.Log
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.DynamicsProcessing
@@ -24,6 +26,10 @@ import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.ryanheise.audioservice.AudioServiceActivity
+import com.hchen.superlyricapi.SuperLyricHelper
+import com.hchen.superlyricapi.SuperLyricData
+import com.hchen.superlyricapi.SuperLyricLine
+import com.hchen.superlyricapi.SuperLyricWord
 import java.io.File
 
 class MainActivity : AudioServiceActivity() {
@@ -31,6 +37,8 @@ class MainActivity : AudioServiceActivity() {
     private var downloadReceiverRegistered = false
     private var lyricsStateReceiverRegistered = false
     private var desktopLyricsChannel: MethodChannel? = null
+    private var superLyricChannel: MethodChannel? = null
+    private var superLyricRegistered = false
     private var bassBoost: BassBoost? = null
     private var bassBoostSessionId: Int? = null
     private var equalizer: Equalizer? = null
@@ -41,6 +49,8 @@ class MainActivity : AudioServiceActivity() {
 
     companion object {
         private const val REQUEST_READ_AUDIO = 1001
+        private const val TAG_SUPER_LYRIC = "SuperLyricPublisher"
+        private const val TAG_BLUETOOTH_LYRICS = "BluetoothLyrics"
     }
 
     private val downloadReceiver = object : BroadcastReceiver() {
@@ -325,8 +335,11 @@ class MainActivity : AudioServiceActivity() {
                         val opacity = call.argument<Double>("opacity")?.toFloat() ?: 0.8f
                         val locked = call.argument<Boolean>("locked") ?: false
                         val passthrough = call.argument<Boolean>("passthrough") ?: false
-                        val textColorLong = call.argument<Long>("textColor") ?: 0xFFFFFFFF
-                        val backgroundColorLong = call.argument<Long>("backgroundColor") ?: 0xFF1A1A2E
+                        // 颜色值小于 2^31 时经 MethodChannel 到达为 Integer，需经 Number 转换
+                        val textColorLong =
+                            (call.argument<Number>("textColor"))?.toLong() ?: 0xFFFFFFFFL
+                        val backgroundColorLong =
+                            (call.argument<Number>("backgroundColor"))?.toLong() ?: 0xFF1A1A2EL
                         val fontSize = call.argument<Double>("fontSize")?.toFloat() ?: 16f
                         val intent = Intent(this, LyricsOverlayService::class.java).apply {
                             action = LyricsOverlayService.ACTION_UPDATE_SETTINGS
@@ -352,6 +365,277 @@ class MainActivity : AudioServiceActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        // SuperLyricApi 歌词发布到系统服务
+        superLyricChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kgka_music_hl/super_lyric"
+        )
+        superLyricChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isAvailable" -> {
+                    runCatching {
+                        SuperLyricHelper.isAvailable()
+                    }.onSuccess { available ->
+                        result.success(available)
+                    }.onFailure { error ->
+                        Log.w(TAG_SUPER_LYRIC, "isAvailable failed: ${error.message}")
+                        result.success(false)
+                    }
+                }
+                "registerPublisher" -> {
+                    runCatching {
+                        if (!superLyricRegistered) {
+                            SuperLyricHelper.registerPublisher()
+                            superLyricRegistered = true
+                        }
+                        // 以系统服务里的真实注册状态为准（本地标志位可能过期）
+                        val registered = runCatching {
+                            SuperLyricHelper.isPublisherRegistered()
+                        }.getOrNull() ?: superLyricRegistered
+                        Log.d(TAG_SUPER_LYRIC, "registerPublisher: registered=$registered")
+                        result.success(registered)
+                    }.onFailure { error ->
+                        Log.w(TAG_SUPER_LYRIC, "registerPublisher failed: ${error.message}")
+                        result.success(false)
+                    }
+                }
+                "unregisterPublisher" -> {
+                    runCatching {
+                        if (superLyricRegistered) {
+                            SuperLyricHelper.unregisterPublisher()
+                            superLyricRegistered = false
+                        }
+                        result.success(null)
+                    }.onFailure {
+                        result.success(null)
+                    }
+                }
+                "sendLyric" -> {
+                    runCatching {
+                        // 自愈：启动时注册可能因系统服务未就绪而失败，
+                        // 这里在首次发送前补注册一次（幂等，服务端按 UID 去重）
+                        if (!superLyricRegistered) {
+                            SuperLyricHelper.registerPublisher()
+                            superLyricRegistered = true
+                        }
+                        val title = call.argument<String>("title") ?: ""
+                        val artist = call.argument<String>("artist") ?: ""
+                        val album = call.argument<String>("album") ?: ""
+                        val lyricText = call.argument<String>("lyricText") ?: ""
+                        // ⚠️ Dart int 经 MethodChannel 传输后，能放进 32 位时是 Integer，
+                        // 直接 cast Long 会抛 ClassCastException，必须经 Number.toLong() 转换
+                        val lyricStartTime =
+                            (call.argument<Number>("lyricStartTime"))?.toLong() ?: 0L
+                        val lyricEndTime =
+                            (call.argument<Number>("lyricEndTime"))?.toLong() ?: 0L
+                        val secondaryText = call.argument<String>("secondaryText")
+                        val translationText = call.argument<String>("translationText")
+                        val words = call.argument<List<Map<String, Any>>>("words")
+
+                        val lyricData = SuperLyricData()
+                            .setTitle(title)
+                            .setArtist(artist)
+                            .setAlbum(album)
+
+                        // 主歌词行（含逐字）
+                        val lyricWords: Array<SuperLyricWord>? = words?.mapNotNull { w ->
+                            val wordText = w["word"] as? String
+                            val wordStart = (w["startTime"] as? Number)?.toLong()
+                            val wordEnd = (w["endTime"] as? Number)?.toLong()
+                            if (wordText != null && wordStart != null && wordEnd != null) {
+                                SuperLyricWord(wordText, wordStart, wordEnd)
+                            } else null
+                        }?.takeIf { it.isNotEmpty() }?.toTypedArray()
+
+                        val mainLyric = if (lyricWords != null) {
+                            SuperLyricLine(lyricText, lyricWords, lyricStartTime, lyricEndTime)
+                        } else {
+                            SuperLyricLine(lyricText, lyricStartTime, lyricEndTime)
+                        }
+                        lyricData.setLyric(mainLyric)
+
+                        // 副歌词行（音译/罗马音）
+                        if (!secondaryText.isNullOrBlank()) {
+                            lyricData.setSecondary(
+                                SuperLyricLine(secondaryText, lyricStartTime, lyricEndTime)
+                            )
+                        }
+                        // 翻译行
+                        if (!translationText.isNullOrBlank()) {
+                            lyricData.setTranslation(
+                                SuperLyricLine(translationText, lyricStartTime, lyricEndTime)
+                            )
+                        }
+                        SuperLyricHelper.sendLyric(lyricData)
+                        Log.d(
+                            TAG_SUPER_LYRIC,
+                            "sendLyric ok: \"$lyricText\" ($lyricStartTime-$lyricEndTime ms), " +
+                                "words=${lyricWords?.size ?: 0}, " +
+                                "secondary=${!secondaryText.isNullOrBlank()}, " +
+                                "translation=${!translationText.isNullOrBlank()}"
+                        )
+                        result.success(true)
+                    }.onFailure { error ->
+                        Log.w(TAG_SUPER_LYRIC, "sendLyric failed: ${error.message}")
+                        result.error("send_lyric_failed", error.message, null)
+                    }
+                }
+                "sendStop" -> {
+                    runCatching {
+                        if (!superLyricRegistered) {
+                            SuperLyricHelper.registerPublisher()
+                            superLyricRegistered = true
+                        }
+                        SuperLyricHelper.sendStop(SuperLyricData())
+                        Log.d(TAG_SUPER_LYRIC, "sendStop ok")
+                        result.success(true)
+                    }.onFailure { error ->
+                        Log.w(TAG_SUPER_LYRIC, "sendStop failed: ${error.message}")
+                        result.error("send_stop_failed", error.message, null)
+                    }
+                }
+                "debugState" -> {
+                    result.success(
+                        mapOf(
+                            "serviceAvailable" to
+                                (runCatching { SuperLyricHelper.isAvailable() }.getOrNull() ?: false),
+                            "localRegisteredFlag" to superLyricRegistered,
+                            "publisherRegistered" to
+                                (runCatching { SuperLyricHelper.isPublisherRegistered() }
+                                    .getOrNull() ?: false),
+                        )
+                    )
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        // 车载蓝牙歌词广播
+        val btLyricChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kgka_music_hl/bluetooth_lyrics"
+        )
+        btLyricChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "broadcastMetaChanged" -> {
+                    runCatching {
+                        val title = call.argument<String>("title") ?: ""
+                        val artist = call.argument<String>("artist") ?: ""
+                        val album = call.argument<String>("album") ?: ""
+                        val lyric = call.argument<String>("lyric") ?: ""
+                        val positionMs = (call.argument<Number>("positionMs") ?: 0).toLong()
+                        val durationMs = (call.argument<Number>("durationMs") ?: 0).toLong()
+                        val playing = call.argument<Boolean>("playing") ?: false
+                        val track = (call.argument<Number>("track") ?: 0).toInt()
+                        val listSize = (call.argument<Number>("listSize") ?: 0).toInt()
+
+                        val extras = Bundle().apply {
+                            putString("track", title)
+                            putString("artist", artist)
+                            putString("album", album)
+                            putString("id", "")
+                            putLong("position", positionMs)
+                            putLong("duration", durationMs)
+                            putBoolean("playing", playing)
+                            putInt("ListSize", listSize)
+                            putInt("trackPos", track)
+                            putString("lyric", lyric)
+                            // 网易云/部分车机额外字段
+                            putString("currentLyric", lyric)
+                            putString("DISPLAY_NAME", title)
+                        }
+
+                        // 标准 Android 音乐元数据变化广播
+                        sendOrderedBroadcast(Intent("com.android.music.metachanged").apply {
+                            putExtras(extras)
+                            setPackage(null)
+                        }, null)
+
+                        // 兼容不同车机/第三方 App 的常见 action
+                        listOf(
+                            "com.android.music.playbackcomplete",
+                            "com.android.music.queuechanged",
+                            "com.android.music.playstatechanged",
+                        ).forEach { action ->
+                            sendBroadcast(Intent(action).apply {
+                                putExtras(Bundle(extras))
+                                setPackage(null)
+                            })
+                        }
+
+                        // QQMusic / Netease 自定义广播（很多车机 App 监听）
+                        sendBroadcast(Intent("com.netease.cloudmusic.metachanged").apply {
+                            putExtras(Bundle(extras))
+                            setPackage(null)
+                        })
+                        sendBroadcast(Intent("com.tencent.qqmusic.metachanged").apply {
+                            putExtras(Bundle(extras))
+                            setPackage(null)
+                        })
+                        // KuGou/KuWo 广播
+                        sendBroadcast(Intent("com.kugou.android.metachanged").apply {
+                            putExtras(Bundle(extras))
+                            setPackage(null)
+                        })
+                        sendBroadcast(Intent("cn.kuwo.player.metachanged").apply {
+                            putExtras(Bundle(extras))
+                            setPackage(null)
+                        })
+
+                        Log.d(
+                            TAG_BLUETOOTH_LYRICS,
+                            "metaChanged ok: \"$title\"/\"$artist\", lyric=\"${lyric.take(24)}\", " +
+                                "pos=${positionMs}ms, playing=$playing, track=$track/$listSize, 7 actions sent"
+                        )
+                        result.success(true)
+                    }.onFailure { error ->
+                        Log.w(TAG_BLUETOOTH_LYRICS, "broadcastMetaChanged failed: ${error.message}")
+                        result.success(false)
+                    }
+                }
+                "broadcastPlayStateChanged" -> {
+                    runCatching {
+                        val title = call.argument<String>("title") ?: ""
+                        val artist = call.argument<String>("artist") ?: ""
+                        val album = call.argument<String>("album") ?: ""
+                        val positionMs = (call.argument<Number>("positionMs") ?: 0).toLong()
+                        val durationMs = (call.argument<Number>("durationMs") ?: 0).toLong()
+                        val playing = call.argument<Boolean>("playing") ?: false
+
+                        val extras = Bundle().apply {
+                            putString("track", title)
+                            putString("artist", artist)
+                            putString("album", album)
+                            putLong("position", positionMs)
+                            putLong("duration", durationMs)
+                            putBoolean("playing", playing)
+                        }
+                        sendBroadcast(Intent("com.android.music.playstatechanged").apply {
+                            putExtras(extras)
+                            setPackage(null)
+                        })
+                        sendBroadcast(Intent("com.netease.cloudmusic.playstatechanged").apply {
+                            putExtras(Bundle(extras))
+                            setPackage(null)
+                        })
+                        sendBroadcast(Intent("com.tencent.qqmusic.playstatechanged").apply {
+                            putExtras(extras)
+                            setPackage(null)
+                        })
+                        Log.d(
+                            TAG_BLUETOOTH_LYRICS,
+                            "playStateChanged ok: \"$title\", playing=$playing, pos=${positionMs}ms"
+                        )
+                        result.success(true)
+                    }.onFailure { error ->
+                        Log.w(TAG_BLUETOOTH_LYRICS, "broadcastPlayStateChanged failed: ${error.message}")
+                        result.success(false)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 
     private fun readAudioPermission(): String {
@@ -780,6 +1064,10 @@ class MainActivity : AudioServiceActivity() {
     override fun onDestroy() {
         releaseEqualizer()
         releaseBassBoost()
+        if (superLyricRegistered) {
+            runCatching { SuperLyricHelper.unregisterPublisher() }
+            superLyricRegistered = false
+        }
         if (downloadReceiverRegistered) {
             unregisterReceiver(downloadReceiver)
             downloadReceiverRegistered = false

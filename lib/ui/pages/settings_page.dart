@@ -213,6 +213,17 @@ class SettingsPage extends StatelessWidget {
                       value: player.autoPlayOnDeviceConnected,
                       onChanged: player.setAutoPlayOnDeviceConnected,
                     ),
+                    if (player.isBluetoothLyricsSupported) ...[
+                      _SettingsDivider(),
+                      _SettingsSwitchTile(
+                        icon: Icons.directions_car_rounded,
+                        iconColor: colorScheme.primary,
+                        title: '车载蓝牙歌词',
+                        subtitle: '将实时歌词推送到车机或第三方车载歌词 App 显示',
+                        value: player.bluetoothLyricsEnabled,
+                        onChanged: player.setBluetoothLyricsEnabled,
+                      ),
+                    ],
                     _SettingsDivider(),
                     _SettingsSwitchTile(
                       icon: Icons.volume_up_rounded,
