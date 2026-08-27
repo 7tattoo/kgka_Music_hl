@@ -31,16 +31,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Setup signing config
-        run: |
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" > android/key.properties
-          echo "storePassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
-          echo "storeFile=release.jks" >> android/key.properties
-
-      - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE }}" | base64 -d > android/app/release.jks
-
       - name: Build APK
         run: flutter build apk --release
 
@@ -49,19 +39,19 @@ jobs:
 
       - name: Rename APK
         run: |
-          cp build/app/outputs/flutter-apk/app-release.apk MeloX-Android-${{ github.ref_name }}.apk
+          cp build/app/outputs/flutter-apk/app-release.apk kgka_Music_Android-${{ github.ref_name }}.apk
 
       - name: Rename App Bundle
         run: |
-          cp build/app/outputs/bundle/release/app-release.aab MeloX-Android-${{ github.ref_name }}.aab
+          cp build/app/outputs/bundle/release/app-release.aab kgka_Music_Android-${{ github.ref_name }}.aab
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            MeloX-Android-*.apk
-            MeloX-Android-*.aab
+            kgka_Music_Android-*.apk
+            kgka_Music_Android-*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -69,14 +59,14 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: MeloX-Android-APK
-          path: MeloX-Android-*.apk
+          name: kgka_Music-Android-APK
+          path: kgka_Music_Android-*.apk
           retention-days: 30
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: MeloX-Android-AAB
-          path: MeloX-Android-*.aab
+          name: kgka_Music-Android-AAB
+          path: kgka_Music_Android-*.aab
           retention-days: 30
