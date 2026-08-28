@@ -8,6 +8,7 @@
   <strong>一个精致的第三方音乐客户端</strong>
   <br />
   基于 Flutter 构建 · 支持多平台 · Material You 设计
+  比分支为针对vivo智能车载（joviincar）使用时适配首页音乐卡片滚动歌词
 </p>
 
 <p align="center">
