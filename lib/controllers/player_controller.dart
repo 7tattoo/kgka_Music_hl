@@ -1297,14 +1297,13 @@ class PlayerController extends ChangeNotifier {
           ? lyrics[index.clamp(0, lyrics.length - 1)].text
           : '';
       final wholeLrc = _lyricsToLrc();
-      unawaited(CarLyricsService.updateLyrics(
-        currentLine: currentLine,
+      // 通过 MediaItem 通道发布，audio_service 会写入 metadata（官方标准路径）
+      _audioHandler.publishCarLyrics(
+        line: currentLine,
         wholeLrc: wholeLrc,
         hasLyrics: true,
-        title: currentSong?.title ?? '',
-        artist: currentSong?.artist ?? '',
-        mediaId: currentSong == null ? '' : (currentSong!.hash.isNotEmpty ? currentSong!.hash : currentSong!.id),
-      ));
+        song: currentSong,
+      );
     }
   }
 
