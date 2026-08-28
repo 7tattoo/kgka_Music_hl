@@ -115,8 +115,8 @@ class MusicAudioHandler extends BaseAudioHandler
         'songId': song.id,
         // 车载歌词字段：通过 MediaItem.extras 让 audio_service 写入 metadata
         'ucar.media.metadata.LYRICS_LINE': '',
-        'ucar.media.metadata.LYRICS_WHOLE': '-1',
-        'ucar.media.metadata.LYRICS_STATUS': 1,
+        'ucar.media.metadata.LYRICS_WHOLE': '',
+        'ucar.media.metadata.LYRICS_STATUS': 2, // loading
       },
     );
   }

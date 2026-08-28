@@ -367,7 +367,7 @@ class PlayerController extends ChangeNotifier {
     lyrics = const [];
     _lastDesktopLyricIndex = -1;
     _lastCarLyricIndex = -2;
-    // 切歌：发 loading 状态，避免显示 "-1"
+    // 切歌：发 loading 状态，避免显示 "-1"，并启动周期重发
     _audioHandler.publishCarLyrics(
       line: '',
       wholeLrc: '',
@@ -375,6 +375,7 @@ class PlayerController extends ChangeNotifier {
       loading: true,
       song: song,
     );
+    _ensureCarLyricsRefresh();
     _saveQueueState();
     _startPositionSaving();
     notifyListeners();
@@ -1308,8 +1309,10 @@ class PlayerController extends ChangeNotifier {
   /// 启动周期重发，对抗 audio_service 用 MediaItem 重建覆盖
   void _ensureCarLyricsRefresh() {
     _carLyricsRefreshTimer?.cancel();
-    _carLyricsRefreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (lyrics.isEmpty || !isPlaying) return;
+    // 每 2 秒重发一次，持续对抗 audio_service 重建 metadata 覆盖整首 LRC。
+    // 播放/暂停都保持歌词状态；歌词未就绪时跳过（维持 loading）。
+    _carLyricsRefreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (lyrics.isEmpty) return;
       _pushCarLyrics(force: true);
     });
   }

@@ -34,6 +34,22 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Auto-increment version from tag
+        shell: bash
+        run: |
+          # 从 tag (v2.6.1) 提取版本号，build 号用日期+序号保证每次递增
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ -z "$TAG_VERSION" || "$TAG_VERSION" == "$GITHUB_REF_NAME" ]]; then
+            # workflow_dispatch 或非 v 前缀，用当前 pubspec 版本
+            TAG_VERSION=$(grep -oP '^version: \K[^+]+' pubspec.yaml | head -1)
+          fi
+          BUILD_DATE=$(date +%Y%m%d)
+          # 递增 build 号：日期 + 短 SHA 前2位，保证唯一递增
+          BUILD_NO="${BUILD_DATE}${GITHUB_SHA:0:2}"
+          NEW_VERSION="${TAG_VERSION}+${BUILD_NO}"
+          sed -i "s/^version: .*/version: ${NEW_VERSION}/" pubspec.yaml
+          echo "Set version: ${NEW_VERSION}"
+
       - name: Build APK
         run: flutter build apk --release
 
