@@ -151,8 +151,8 @@ class MusicAudioHandler extends BaseAudioHandler
       duration: current.duration,
       artUri: current.artUri,
       displayTitle: current.title,
-      displaySubtitle: current.subtitle,
-      displayDescription: current.description,
+      displaySubtitle: current.displaySubtitle,
+      displayDescription: current.displayDescription,
       extras: baseExtras,
     ));
   }
