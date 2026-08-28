@@ -121,23 +121,40 @@ class MusicAudioHandler extends BaseAudioHandler
     );
   }
 
-  /// 发布车载歌词（抖音：让 audio_service 把歌词写进 metadata）
-  /// [line] 当前行歌词；[wholeLrc] 完整LRC；[hasLyrics] 是否有；[song] 歌曲信息
+  /// 发布车载歌词（让 audio_service 把歌词写进 metadata / extras）
+  /// [line] 当前行歌词；[wholeLrc] 完整LRC；[hasLyrics] 是否有；
+  /// [loading] 歌词是否加载中（切歌后）
   void publishCarLyrics({
     required String line,
     required String wholeLrc,
     required bool hasLyrics,
+    required bool loading,
     Song? song,
   }) {
     final current = mediaItem.valueOrNull;
     if (current == null) return;
+    final songTitle = song?.title ?? current.title;
+    final songArtist = song?.artist ?? current.artist;
     final baseExtras = Map<String, dynamic>.from(current.extras ?? {});
     baseExtras['hash'] = song?.hash ?? baseExtras['hash'] ?? '';
     baseExtras['songId'] = song?.id ?? baseExtras['songId'] ?? '';
-    baseExtras['ucar.media.metadata.LYRICS_LINE'] = line;
-    baseExtras['ucar.media.metadata.LYRICS_WHOLE'] =
-        (hasLyrics && wholeLrc.isNotEmpty) ? wholeLrc : '-1';
-    baseExtras['ucar.media.metadata.LYRICS_STATUS'] = hasLyrics ? 0 : 1;
+
+    // 歌词状态：
+    //   loading -> 不设置歌词字段，避免显示 "-1"；等就绪后推送
+    //   hasLyrics -> 整首LRC + 当前行
+    //   无歌词 -> LYRICS_WHOLE=-1, STATUS=1
+    if (!loading) {
+      baseExtras['ucar.media.metadata.LYRICS_LINE'] = line;
+      baseExtras['ucar.media.metadata.LYRICS_WHOLE'] =
+          (hasLyrics && wholeLrc.isNotEmpty) ? wholeLrc : '-1';
+      baseExtras['ucar.media.metadata.LYRICS_STATUS'] = hasLyrics ? 0 : 1;
+    } else {
+      // 加载中：不写 "-1"，用 loading 状态
+      baseExtras['ucar.media.metadata.LYRICS_LINE'] = '';
+      baseExtras['ucar.media.metadata.LYRICS_WHOLE'] = '';
+      baseExtras['ucar.media.metadata.LYRICS_STATUS'] = 2; // loading
+    }
+
     // 原始歌名/歌手供车机卡片展示（腾讯爱趣听读 TITLE 显示歌词，歌名存这）
     baseExtras['UCAR_TITLE'] = song?.title ?? current.title;
     baseExtras['UCAR_ARTIST'] = song?.artist ?? current.artist;
@@ -145,12 +162,12 @@ class MusicAudioHandler extends BaseAudioHandler
     mediaItem.add(MediaItem(
       id: current.id,
       album: current.album,
-      // 关键：把当前行歌词写入 TITLE（com.tencent.wecarflow 读取来源）
-      title: (hasLyrics && line.isNotEmpty) ? line : current.title,
-      artist: current.artist,
+      // 关键：把当前行歌词写入 TITLE（com.tencent.wecarflow 读取来源）；加载中显示歌名
+      title: (!loading && hasLyrics && line.isNotEmpty) ? line : songTitle,
+      artist: songArtist,
       duration: current.duration,
       artUri: current.artUri,
-      displayTitle: current.title,
+      displayTitle: current.displayTitle,
       displaySubtitle: current.displaySubtitle,
       displayDescription: current.displayDescription,
       extras: baseExtras,

@@ -110,7 +110,7 @@ class PlayerController extends ChangeNotifier {
       _maybeCompleteFromPosition(value);
       _maybeStopClimaxPreview(value);
       _maybeSyncDesktopLyricFromPosition();
-      _syncCarLyricsFromPosition();
+      _pushCarLyrics();
       notifyListeners();
     });
     // Send timing anchors; Android animates karaoke progress at display refresh.
@@ -366,6 +366,15 @@ class PlayerController extends ChangeNotifier {
     }
     lyrics = const [];
     _lastDesktopLyricIndex = -1;
+    _lastCarLyricIndex = -2;
+    // 切歌：发 loading 状态，避免显示 "-1"
+    _audioHandler.publishCarLyrics(
+      line: '',
+      wholeLrc: '',
+      hasLyrics: false,
+      loading: true,
+      song: song,
+    );
     _saveQueueState();
     _startPositionSaving();
     notifyListeners();
@@ -810,6 +819,9 @@ class PlayerController extends ChangeNotifier {
     }
     if (currentSong?.hash == song.hash) {
       _syncDesktopLyrics();
+      // 歌词就绪：立即推送整首 LRC 并启动周期重发
+      _pushCarLyrics(force: true);
+      _ensureCarLyricsRefresh();
     }
   }
 
@@ -1271,6 +1283,36 @@ class PlayerController extends ChangeNotifier {
 
   // ---- vivo 智能车载歌词同步 ----
   int _lastCarLyricIndex = -2; // -2 表示初始未同步状态
+  Timer? _carLyricsRefreshTimer;
+
+  /// 强制重新推送车载歌词（歌词就绪或切歌时调用）
+  void _pushCarLyrics({bool force = false}) {
+    // 歌词未就绪或无歌词数据时，不推送整首
+    if (lyrics.isEmpty) return;
+    final index = activeLyricIndex;
+    if (!force && index == _lastCarLyricIndex) return;
+    _lastCarLyricIndex = index;
+    final currentLine = lyrics.isNotEmpty && index >= 0
+        ? lyrics[index.clamp(0, lyrics.length - 1)].text
+        : '';
+    final wholeLrc = _lyricsToLrc();
+    _audioHandler.publishCarLyrics(
+      line: currentLine,
+      wholeLrc: wholeLrc,
+      hasLyrics: true,
+      loading: false,
+      song: currentSong,
+    );
+  }
+
+  /// 启动周期重发，对抗 audio_service 用 MediaItem 重建覆盖
+  void _ensureCarLyricsRefresh() {
+    _carLyricsRefreshTimer?.cancel();
+    _carLyricsRefreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (lyrics.isEmpty || !isPlaying) return;
+      _pushCarLyrics(force: true);
+    });
+  }
 
   /// 将歌词列表转换为 LRC 格式字符串
   String _lyricsToLrc() {
@@ -1286,25 +1328,6 @@ class PlayerController extends ChangeNotifier {
       buf.writeln(line.text);
     }
     return buf.toString();
-  }
-
-  void _syncCarLyricsFromPosition() {
-    if (lyrics.isEmpty) return;
-    final index = activeLyricIndex;
-    if (index != _lastCarLyricIndex) {
-      _lastCarLyricIndex = index;
-      final currentLine = lyrics.isNotEmpty && index >= 0
-          ? lyrics[index.clamp(0, lyrics.length - 1)].text
-          : '';
-      final wholeLrc = _lyricsToLrc();
-      // 通过 MediaItem 通道发布，audio_service 会写入 metadata（官方标准路径）
-      _audioHandler.publishCarLyrics(
-        line: currentLine,
-        wholeLrc: wholeLrc,
-        hasLyrics: true,
-        song: currentSong,
-      );
-    }
   }
 
   void _syncDesktopKaraokeProgress() {
@@ -1747,6 +1770,7 @@ class PlayerController extends ChangeNotifier {
     _queueSaveTimer?.cancel();
     _autoResumeTimer?.cancel();
     _sleepTimer?.cancel();
+    _carLyricsRefreshTimer?.cancel();
     _positionSub.cancel();
     _durationSub.cancel();
     _stateSub.cancel();
