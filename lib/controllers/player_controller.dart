@@ -1309,9 +1309,9 @@ class PlayerController extends ChangeNotifier {
   /// 启动周期重发，对抗 audio_service 用 MediaItem 重建覆盖
   void _ensureCarLyricsRefresh() {
     _carLyricsRefreshTimer?.cancel();
-    // 每 2 秒重发一次，持续对抗 audio_service 重建 metadata 覆盖整首 LRC。
-    // 播放/暂停都保持歌词状态；歌词未就绪时跳过（维持 loading）。
-    _carLyricsRefreshTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    // 低频兜底重发：防止 audio_service 其他路径重建 metadata 时丢失歌词字段。
+    // 频率不宜过高（频繁 onMetadataChanged 会让车机 UI 状态重置回单行）。
+    _carLyricsRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (lyrics.isEmpty) return;
       _pushCarLyrics(force: true);
     });

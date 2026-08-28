@@ -155,15 +155,16 @@ class MusicAudioHandler extends BaseAudioHandler
       baseExtras['ucar.media.metadata.LYRICS_STATUS'] = 2; // loading
     }
 
-    // 原始歌名/歌手供车机卡片展示（腾讯爱趣听读 TITLE 显示歌词，歌名存这）
+    // 歌曲栏读取来源：TITLE 必须保持歌名，否则歌曲栏/歌词栏会显示相同内容，
+    // 车机会判定为"纯歌词流"退化为单行模式。歌词只走 LYRICS_* 字段。
     baseExtras['UCAR_TITLE'] = song?.title ?? current.title;
     baseExtras['UCAR_ARTIST'] = song?.artist ?? current.artist;
 
     mediaItem.add(MediaItem(
       id: current.id,
       album: current.album,
-      // 关键：把当前行歌词写入 TITLE（com.tencent.wecarflow 读取来源）；加载中显示歌名
-      title: (!loading && hasLyrics && line.isNotEmpty) ? line : songTitle,
+      // TITLE 保持歌名（歌曲栏正常显示），歌词走 LYRICS_LINE/WHOLE
+      title: songTitle,
       artist: songArtist,
       duration: current.duration,
       artUri: current.artUri,
