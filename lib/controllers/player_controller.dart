@@ -198,6 +198,9 @@ class PlayerController extends ChangeNotifier {
   bool _isSeeking = false;
   bool _isScrubbing = false;
   bool _isHandlingCompletion = false;
+  bool _isPersonalFmActive = false;
+  bool _isLoadingPersonalFm = false;
+  int _personalFmRequestSerial = 0;
   String? _completedSongHash;
   bool _isAppForeground = true;
   bool _desktopLyricsPreviewVisible = false;
@@ -214,6 +217,10 @@ class PlayerController extends ChangeNotifier {
   bool _isChangingSource = false;
   bool addListeningTimeEnabled = true;
   AudioQuality audioQuality = AudioQuality.standard;
+
+  bool get isPersonalFmActive => _isPersonalFmActive;
+
+  bool get isLoadingPersonalFm => _isLoadingPersonalFm;
 
   /// 是否开启音质智能切换（播放失败时自动降级重试）。
   bool smartQualityEnabled = false;
@@ -296,6 +303,10 @@ class PlayerController extends ChangeNotifier {
     if (song == null) {
       return -1;
     }
+    final identicalIndex = queue.indexWhere((item) => identical(item, song));
+    if (identicalIndex >= 0) {
+      return identicalIndex;
+    }
     return queue.indexWhere((item) => item.hash == song.hash);
   }
 
@@ -348,7 +359,16 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> playSong(Song song, {List<Song>? queue}) async {
+  Future<void> playSong(
+    Song song, {
+    List<Song>? queue,
+    bool preservePersonalFmSession = false,
+  }) async {
+    if (!preservePersonalFmSession) {
+      _isPersonalFmActive = false;
+      _isLoadingPersonalFm = false;
+      _personalFmRequestSerial++;
+    }
     _climaxEndTime = null;
     climax = null;
     _completionFallbackTimer?.cancel();
@@ -426,6 +446,48 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
+  /// 启动固定为“红心 Radio + 根据口味”的私人 FM 会话。
+  Future<bool> startPersonalFm({List<Song>? initialSongs}) async {
+    if (_isLoadingPersonalFm) {
+      return false;
+    }
+
+    _isLoadingPersonalFm = true;
+    final requestSerial = ++_personalFmRequestSerial;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final songs = initialSongs?.isNotEmpty == true
+          ? List<Song>.of(initialSongs!)
+          : await _api.personalFm();
+      if (requestSerial != _personalFmRequestSerial) {
+        return false;
+      }
+      if (songs.isEmpty) {
+        errorMessage = '暂时没有新的私人 FM 推荐';
+        return false;
+      }
+
+      _isPersonalFmActive = true;
+      await playSong(
+        songs.first,
+        queue: songs,
+        preservePersonalFmSession: true,
+      );
+      return errorMessage == null;
+    } catch (error) {
+      if (requestSerial == _personalFmRequestSerial) {
+        errorMessage = error.toString();
+      }
+      return false;
+    } finally {
+      if (requestSerial == _personalFmRequestSerial) {
+        _isLoadingPersonalFm = false;
+        notifyListeners();
+      }
+    }
+  }
+
   /// 预缓存歌曲封面到 Flutter ImageCache，打开播放页时可立即显示。
   void _precacheCover(Song song) {
     final coverUrl = song.coverUrl;
@@ -457,21 +519,33 @@ class PlayerController extends ChangeNotifier {
     }
 
     try {
-      final playUrl = await _api.songUrl(song, quality: audioQuality);
+      final playUrl = await _api.songUrl(
+        song,
+        quality: audioQuality,
+        hashOnly: _isPersonalFmActive,
+      );
       if (playUrl.url.isNotEmpty || !smartQualityEnabled) {
         return playUrl;
       }
       // 返回空地址：按智能音质策略降级重试
       final fallback = _nextLowerQuality(audioQuality);
       if (fallback == null) return playUrl;
-      return _api.songUrl(song, quality: fallback);
+      return _api.songUrl(
+        song,
+        quality: fallback,
+        hashOnly: _isPersonalFmActive,
+      );
     } catch (error) {
       if (!smartQualityEnabled) rethrow;
       // 网络请求失败：尝试降级重试
       final fallback = _nextLowerQuality(audioQuality);
       if (fallback == null) rethrow;
       try {
-        final retryUrl = await _api.songUrl(song, quality: fallback);
+        final retryUrl = await _api.songUrl(
+          song,
+          quality: fallback,
+          hashOnly: _isPersonalFmActive,
+        );
         if (retryUrl.url.isNotEmpty) {
           debugPrint(
             '[KA Music][smart-quality] ${audioQuality.badge} 失败，'
@@ -906,15 +980,27 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> next() async {
+    if (_isPersonalFmActive && _isAtQueueEnd) {
+      await _loadNextPersonalFmBatch(isOverplay: false);
+      return;
+    }
     final nextSong = _nextSong();
     if (nextSong == null) return;
-    await playSong(nextSong, queue: queue);
+    await playSong(
+      nextSong,
+      queue: queue,
+      preservePersonalFmSession: _isPersonalFmActive,
+    );
   }
 
   Future<void> previous() async {
     final index = currentIndex;
     if (index > 0) {
-      await playSong(queue[index - 1], queue: queue);
+      await playSong(
+        queue[index - 1],
+        queue: queue,
+        preservePersonalFmSession: _isPersonalFmActive,
+      );
     } else {
       await seek(Duration.zero);
     }
@@ -947,7 +1033,12 @@ class PlayerController extends ChangeNotifier {
         if (_completedSongHash != currentSong?.hash) return;
       }
 
-      if (playbackMode == PlaybackMode.singleLoop) {
+      if (_isPersonalFmActive && _isAtQueueEnd) {
+        await _loadNextPersonalFmBatch(isOverplay: true);
+        return;
+      }
+
+      if (!_isPersonalFmActive && playbackMode == PlaybackMode.singleLoop) {
         _completedSongHash = null;
         await _audioHandler.seek(Duration.zero);
         await _audioHandler.play();
@@ -959,7 +1050,11 @@ class PlayerController extends ChangeNotifier {
         await _audioHandler.seek(Duration.zero);
         return;
       }
-      await playSong(nextSong, queue: queue);
+      await playSong(
+        nextSong,
+        queue: queue,
+        preservePersonalFmSession: _isPersonalFmActive,
+      );
     } finally {
       _isHandlingCompletion = false;
     }
@@ -1020,7 +1115,11 @@ class PlayerController extends ChangeNotifier {
             hash: song.hash,
           );
         } else {
-          playUrl = await _api.songUrl(song, quality: audioQuality);
+          playUrl = await _api.songUrl(
+            song,
+            quality: audioQuality,
+            hashOnly: _isPersonalFmActive,
+          );
         }
         if (playUrl.url.isEmpty) {
           throw Exception('当前音质暂时没有可播放地址');
@@ -1681,6 +1780,12 @@ class PlayerController extends ChangeNotifier {
     }
 
     final index = currentIndex;
+    if (_isPersonalFmActive) {
+      if (index >= 0 && index < queue.length - 1) {
+        return queue[index + 1];
+      }
+      return null;
+    }
     if (playbackMode == PlaybackMode.shuffle) {
       if (queue.length == 1) return queue.first;
 
@@ -1698,6 +1803,93 @@ class PlayerController extends ChangeNotifier {
     }
 
     return queue.first;
+  }
+
+  bool get _isAtQueueEnd {
+    final index = currentIndex;
+    return index >= 0 && index == queue.length - 1;
+  }
+
+  Future<void> _loadNextPersonalFmBatch({required bool isOverplay}) async {
+    final song = currentSong;
+    if (!_isPersonalFmActive || song == null || !_isAtQueueEnd) {
+      return;
+    }
+    if (_isLoadingPersonalFm) {
+      return;
+    }
+
+    _isLoadingPersonalFm = true;
+    final requestSerial = ++_personalFmRequestSerial;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      var incoming = await _api.personalFm(
+        hash: song.hash.isEmpty ? null : song.hash,
+        songId: song.id.isEmpty ? null : song.id,
+        playtime: smoothPosition.inSeconds,
+        isOverplay: isOverplay,
+      );
+      if (requestSerial != _personalFmRequestSerial) {
+        return;
+      }
+      if (!_isPersonalFmActive || currentSong != song || !_isAtQueueEnd) {
+        return;
+      }
+
+      var additions = _personalFmAdditions(incoming, song);
+      if (additions.isEmpty) {
+        incoming = await _api.personalFm();
+        if (requestSerial != _personalFmRequestSerial ||
+            !_isPersonalFmActive ||
+            currentSong != song ||
+            !_isAtQueueEnd) {
+          return;
+        }
+        additions = _personalFmAdditions(incoming, song);
+      }
+      if (additions.isEmpty) {
+        errorMessage = '私人 FM 暂时没有新的推荐歌曲';
+        return;
+      }
+
+      queue = [...queue, ...additions];
+      await playSong(
+        additions.first,
+        queue: queue,
+        preservePersonalFmSession: true,
+      );
+    } catch (error) {
+      if (requestSerial == _personalFmRequestSerial) {
+        errorMessage = error.toString();
+      }
+    } finally {
+      if (requestSerial == _personalFmRequestSerial) {
+        _isLoadingPersonalFm = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  String _songIdentity(Song song) {
+    if (song.hash.isNotEmpty) {
+      return 'hash:${song.hash}';
+    }
+    if (song.albumAudioId?.isNotEmpty == true) {
+      return 'audio:${song.albumAudioId}';
+    }
+    return song.id.isEmpty ? '' : 'id:${song.id}';
+  }
+
+  List<Song> _personalFmAdditions(List<Song> incoming, Song current) {
+    final currentIdentity = _songIdentity(current);
+    return incoming
+        .where((song) {
+          final identity = _songIdentity(song);
+          return identity.isNotEmpty && identity != currentIdentity;
+        })
+        .take(5)
+        .toList();
   }
 
   @override

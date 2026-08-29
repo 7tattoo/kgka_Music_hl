@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -70,7 +72,7 @@ class MusicAudioHandler extends BaseAudioHandler
 
   @override
   Future<void> play() async {
-    await audioPlayer.play();
+    unawaited(audioPlayer.play());
   }
 
   @override

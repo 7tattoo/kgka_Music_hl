@@ -205,6 +205,44 @@ class MusicApi {
     return DailyRecommend.fromJson(json);
   }
 
+  /// 获取红心 Radio + 根据口味的私人 FM 推荐。
+  Future<List<Song>> personalFm({
+    String? hash,
+    String? songId,
+    int? playtime,
+    bool isOverplay = false,
+  }) async {
+    final hasPlaybackFeedback =
+        hash != null || songId != null || playtime != null;
+    final raw = await _client.get('/personal/fm', {
+      'mode': 'normal',
+      'songPoolId': 0,
+      if (hasPlaybackFeedback) ...{
+        'hash': hash,
+        'songid': songId,
+        'playtime': playtime,
+        'action': 'play',
+        'isOverplay': isOverplay,
+        'remainSongCnt': 0,
+      },
+    });
+    final json = asMap(raw);
+    final songs = <Song>[];
+    final identities = <String>{};
+    for (final item in asList(json['song_list']).whereType<Map>()) {
+      final song = Song.fromPersonalFm(asMap(item));
+      final identity = song.hash.isNotEmpty ? song.hash : song.id;
+      if (identity.isEmpty || !identities.add(identity)) {
+        continue;
+      }
+      songs.add(song);
+      if (songs.length == 5) {
+        break;
+      }
+    }
+    return songs;
+  }
+
   /// 新歌速递。
   Future<List<Song>> topSongs({int type = 21608, int page = 1}) async {
     final raw = await _client.get('/top/song', {'type': type, 'page': page});
@@ -231,6 +269,43 @@ class MusicApi {
         .where((album) => album.id.isNotEmpty)
         .toList();
   }
+
+  /// 探索发现页的 6 组推荐歌曲。
+  ///
+  /// 每组推荐独立降级，单个请求失败不会阻断其他推荐或首页加载。
+  Future<List<RecommendedSongCard>> recommendedSongCards() async {
+    const definitions = <(int, String)>[
+      (1, '私人专属好歌'),
+      (2, '经典怀旧金曲'),
+      (3, '热门好歌精选'),
+      (4, '小众宝藏佳作'),
+      (5, '潮流尝鲜'),
+      (6, 'VIP 专属推荐'),
+    ];
+    final cards = await Future.wait(
+      definitions.map((definition) async {
+        try {
+          final json = asMap(
+            await _client.get('/top/card', {'card_id': definition.$1}),
+          );
+          final card = RecommendedSongCard.fromJson(
+            cardId: definition.$1,
+            title: definition.$2,
+            json: json,
+          );
+          return card.songs.isEmpty ? null : card;
+        } catch (error, stackTrace) {
+          debugPrint(
+            'Failed to load recommended song card ${definition.$1}: $error\n'
+            '$stackTrace',
+          );
+          return null;
+        }
+      }),
+    );
+    return cards.whereType<RecommendedSongCard>().toList();
+  }
+
   Future<List<AlbumShopItem>> albumShop({int page = 1, int pageSize = 30}) async {
     final json = asMap(
       await _client.get('/album/shop', {'page': page, 'pagesize': pageSize}),
@@ -573,13 +648,16 @@ class MusicApi {
   Future<PlayUrl> songUrl(
     Song song, {
     AudioQuality quality = AudioQuality.standard,
+    bool hashOnly = false,
   }) async {
     final json = asMap(
       await _client.get('/song/url', {
         'hash': song.hash,
         'quality': quality.apiValue,
-        'album_id': song.albumId,
-        'album_audio_id': song.albumAudioId,
+        if (!hashOnly) ...{
+          'album_id': song.albumId,
+          'album_audio_id': song.albumAudioId,
+        },
         'free_part': false,
       }),
     );

@@ -66,6 +66,10 @@ class _HomePageState extends State<HomePage> {
   var _sectionIndex = 0;
   var _updateBannerDismissed = false;
   var _autoUpdateDialogShown = false;
+  var _isStartingPersonalFm = false;
+  var _isLoadingPersonalFmPreview = false;
+  var _hasRequestedPersonalFmPreview = false;
+  List<Song> _personalFmPreviewSongs = const [];
 
   @override
   void initState() {
@@ -84,6 +88,9 @@ class _HomePageState extends State<HomePage> {
       _tryRestoreFromCache();
     }
     widget.auth.addListener(_handleAuthChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPersonalFmPreview();
+    });
     if (AppUpdateService.isSupportedPlatform) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
     }
@@ -104,6 +111,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleAuthChanged() {
+    if (!widget.auth.isRestoring) {
+      if (widget.auth.isLoggedIn) {
+        _loadPersonalFmPreview();
+      } else {
+        _hasRequestedPersonalFmPreview = false;
+        if (_personalFmPreviewSongs.isNotEmpty && mounted) {
+          setState(() => _personalFmPreviewSongs = const []);
+        }
+      }
+    }
     if (widget.auth.isRestoring || !widget.auth.isLoggedIn) {
       return;
     }
@@ -155,6 +172,7 @@ class _HomePageState extends State<HomePage> {
         widget.api.albumShop(),
         widget.api.topSongs(),
         widget.api.topAlbums(pageSize: 10),
+        widget.api.recommendedSongCards(),
       ]);
       if (!mounted) return;
       final data = _HomeData(
@@ -163,6 +181,7 @@ class _HomePageState extends State<HomePage> {
         albums: results[2] as List<AlbumShopItem>,
         topSongs: results[3] as List<Song>,
         topAlbums: results[4] as List<TopAlbumItem>,
+        recommendedSongCards: results[5] as List<RecommendedSongCard>,
       );
       _cachedData = data;
       await widget.cache.write('cache_home', {
@@ -171,6 +190,9 @@ class _HomePageState extends State<HomePage> {
         'albums': data.albums.map((a) => a.toCache()).toList(),
         'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
         'topAlbums': data.topAlbums.map(_topAlbumToCache).toList(),
+        'recommendedSongCards': data.recommendedSongCards
+            .map((card) => card.toCache())
+            .toList(),
       });
       if (!mounted) return;
       _checkAndAutoPlay(data);
@@ -189,6 +211,7 @@ class _HomePageState extends State<HomePage> {
       widget.api.albumShop(),
       widget.api.topSongs(),
       widget.api.topAlbums(pageSize: 10),
+      widget.api.recommendedSongCards(),
     ]);
     final data = _HomeData(
       daily: results[0] as DailyRecommend,
@@ -196,6 +219,7 @@ class _HomePageState extends State<HomePage> {
       albums: results[2] as List<AlbumShopItem>,
       topSongs: results[3] as List<Song>,
       topAlbums: results[4] as List<TopAlbumItem>,
+      recommendedSongCards: results[5] as List<RecommendedSongCard>,
     );
     _cachedData = data;
     await widget.cache.write('cache_home', {
@@ -204,6 +228,9 @@ class _HomePageState extends State<HomePage> {
       'albums': data.albums.map((a) => a.toCache()).toList(),
       'topSongs': data.topSongs.map((song) => song.toCache()).toList(),
       'topAlbums': data.topAlbums.map(_topAlbumToCache).toList(),
+      'recommendedSongCards': data.recommendedSongCards
+          .map((card) => card.toCache())
+          .toList(),
     });
     _checkAndAutoPlay(data);
     return data;
@@ -253,6 +280,12 @@ class _HomePageState extends State<HomePage> {
           .whereType<Map<String, dynamic>>()
           .map(_topAlbumFromCache)
           .toList(),
+      recommendedSongCards:
+          (json['recommendedSongCards'] as List? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(RecommendedSongCard.fromCache)
+              .where((card) => card.cardId > 0 && card.songs.isNotEmpty)
+              .toList(),
     );
   }
 
@@ -261,7 +294,10 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _future = future;
     });
-    await future;
+    final fmFuture = !widget.player.isPersonalFmActive
+        ? _loadPersonalFmPreview(force: true)
+        : Future<void>.value();
+    await Future.wait([future, fmFuture]);
   }
 
   Future<void> _checkForUpdates() async {
@@ -337,8 +373,88 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _openRecommendedSongCard(RecommendedSongCard card) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlaylistDetailPage(
+          api: widget.api,
+          auth: widget.auth,
+          player: widget.player,
+          playlist: PlaylistSummary(
+            id: 'recommended-card-${card.cardId}',
+            title: card.title,
+            subtitle: card.description?.trim().isNotEmpty == true
+                ? card.description
+                : card.songSummary,
+            coverUrl: card.coverUrl,
+            songCount: card.songs.length,
+          ),
+          initialSongs: card.songs,
+          readOnly: true,
+        ),
+      ),
+    );
+  }
+
   void _playSong(Song song, List<Song> queue) {
     widget.player.playSong(song, queue: queue);
+  }
+
+  Future<void> _loadPersonalFmPreview({bool force = false}) async {
+    if (force) {
+      _hasRequestedPersonalFmPreview = false;
+    }
+    if (!mounted ||
+        widget.auth.isRestoring ||
+        !widget.auth.isLoggedIn ||
+        _isLoadingPersonalFmPreview ||
+        _hasRequestedPersonalFmPreview) {
+      return;
+    }
+
+    _hasRequestedPersonalFmPreview = true;
+    setState(() => _isLoadingPersonalFmPreview = true);
+    try {
+      final songs = await widget.api.personalFm();
+      if (!mounted || !widget.auth.isLoggedIn) {
+        return;
+      }
+      setState(() => _personalFmPreviewSongs = songs);
+    } catch (_) {
+      _hasRequestedPersonalFmPreview = false;
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingPersonalFmPreview = false);
+      }
+    }
+  }
+
+  Future<void> _startPersonalFm() async {
+    if (widget.player.isPersonalFmActive) {
+      await widget.player.togglePlay();
+      return;
+    }
+    if (_isStartingPersonalFm) {
+      return;
+    }
+    if (!widget.auth.isLoggedIn) {
+      Toast.info('登录后才能使用私人 FM');
+      return;
+    }
+
+    setState(() => _isStartingPersonalFm = true);
+    try {
+      final success = await widget.player.startPersonalFm(
+        initialSongs: _personalFmPreviewSongs,
+      );
+      if (!success) {
+        Toast.error(widget.player.errorMessage ?? '私人 FM 加载失败，请稍后再试');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isStartingPersonalFm = false);
+      }
+    }
   }
 
   void _openArtist(Song song) {
@@ -417,8 +533,7 @@ class _HomePageState extends State<HomePage> {
                 SliverToBoxAdapter(
                   child: _RecommendHeader(
                     auth: widget.auth,
-                    daily: data!.daily,
-                    albums: data.albums,
+                    albums: data!.albums,
                     sectionIndex: _sectionIndex,
                     onSectionChanged: (value) {
                       if (value == -1) {
@@ -428,12 +543,12 @@ class _HomePageState extends State<HomePage> {
                         widget.onTabSwitch?.call(value == 0 ? 1 : 2);
                       }
                     },
-                    onDailyPlay: () {
-                      final songs = data.daily.songs;
-                      if (songs.isNotEmpty) {
-                        widget.player.playSong(songs.first, queue: songs);
-                      }
-                    },
+                    onPersonalFmPlay: _startPersonalFm,
+                    isPersonalFmLoading:
+                        _isStartingPersonalFm || _isLoadingPersonalFmPreview,
+                    personalFmPreviewSong: _personalFmPreviewSongs.isEmpty
+                        ? null
+                        : _personalFmPreviewSongs.first,
                     onAlbumTap: _openAlbumShop,
                     api: widget.api,
                     player: widget.player,
@@ -480,6 +595,11 @@ class _HomePageState extends State<HomePage> {
                                 albums: data.topAlbums,
                                 onTap: _openTopAlbum,
                               ),
+                            if (data.recommendedSongCards.isNotEmpty)
+                              _RecommendedSongCardRail(
+                                cards: data.recommendedSongCards,
+                                onTap: _openRecommendedSongCard,
+                              ),
                           ],
                         ),
                       ),
@@ -506,11 +626,12 @@ class _HomePageState extends State<HomePage> {
 class _RecommendHeader extends StatelessWidget {
   const _RecommendHeader({
     required this.auth,
-    required this.daily,
     required this.albums,
     required this.sectionIndex,
     required this.onSectionChanged,
-    required this.onDailyPlay,
+    required this.onPersonalFmPlay,
+    required this.isPersonalFmLoading,
+    required this.personalFmPreviewSong,
     required this.onAlbumTap,
     required this.api,
     required this.player,
@@ -521,11 +642,12 @@ class _RecommendHeader extends StatelessWidget {
   });
 
   final AuthController auth;
-  final DailyRecommend daily;
   final List<AlbumShopItem> albums;
   final int sectionIndex;
   final ValueChanged<int> onSectionChanged;
-  final VoidCallback onDailyPlay;
+  final VoidCallback onPersonalFmPlay;
+  final bool isPersonalFmLoading;
+  final Song? personalFmPreviewSong;
   final VoidCallback onAlbumTap;
   final MusicApi api;
   final PlayerController player;
@@ -602,9 +724,11 @@ class _RecommendHeader extends StatelessWidget {
                       Expanded(
                         flex: 6,
                         child: _FeatureShelf(
-                          daily: daily,
                           albums: albums,
-                          onDailyPlay: onDailyPlay,
+                          player: player,
+                          onPersonalFmPlay: onPersonalFmPlay,
+                          isPersonalFmLoading: isPersonalFmLoading,
+                          personalFmPreviewSong: personalFmPreviewSong,
                           onAlbumTap: onAlbumTap,
                         ),
                       ),
@@ -622,9 +746,11 @@ class _RecommendHeader extends StatelessWidget {
                   )
                 else ...[
                   _FeatureShelf(
-                    daily: daily,
                     albums: albums,
-                    onDailyPlay: onDailyPlay,
+                    player: player,
+                    onPersonalFmPlay: onPersonalFmPlay,
+                    isPersonalFmLoading: isPersonalFmLoading,
+                    personalFmPreviewSong: personalFmPreviewSong,
                     onAlbumTap: onAlbumTap,
                   ),
                   if (isCarMode)
@@ -798,15 +924,19 @@ class _SmartSearch extends StatelessWidget {
 
 class _FeatureShelf extends StatelessWidget {
   const _FeatureShelf({
-    required this.daily,
     required this.albums,
-    required this.onDailyPlay,
+    required this.player,
+    required this.onPersonalFmPlay,
+    required this.isPersonalFmLoading,
+    required this.personalFmPreviewSong,
     required this.onAlbumTap,
   });
 
-  final DailyRecommend daily;
   final List<AlbumShopItem> albums;
-  final VoidCallback onDailyPlay;
+  final PlayerController player;
+  final VoidCallback onPersonalFmPlay;
+  final bool isPersonalFmLoading;
+  final Song? personalFmPreviewSong;
   final VoidCallback onAlbumTap;
 
   @override
@@ -821,16 +951,29 @@ class _FeatureShelf extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: _FeatureCard(
-                    title: '猜你喜欢',
-                    subtitle: daily.songs.isEmpty
-                        ? '献给此刻迈步的你'
-                        : daily.songs.first.title,
-                    imageUrl: daily.songs.isEmpty
-                        ? daily.coverUrl
-                        : daily.songs.first.coverUrl,
-                    gradient: const [Color(0xFFFFD88E), Color(0xFFFF8DA2)],
-                    onTap: onDailyPlay,
+                  child: AnimatedBuilder(
+                    animation: player,
+                    builder: (context, _) {
+                      final currentFmSong = player.isPersonalFmActive
+                          ? player.currentSong
+                          : personalFmPreviewSong;
+                      return _FeatureCard(
+                        title: '猜你喜欢',
+                        subtitle: currentFmSong?.title ??
+                            '红心 Radio · 根据口味',
+                        imageUrl: currentFmSong?.coverUrl,
+                        gradient: const [
+                          Color(0xFFFFD88E),
+                          Color(0xFFFF8DA2),
+                        ],
+                        onTap: onPersonalFmPlay,
+                        loading: isPersonalFmLoading ||
+                            player.isLoadingPersonalFm,
+                        icon: player.isPersonalFmActive && player.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -874,6 +1017,8 @@ class _FeatureCard extends StatelessWidget {
     required this.imageUrl,
     required this.gradient,
     required this.onTap,
+    this.loading = false,
+    this.icon = Icons.play_arrow_rounded,
   });
 
   final String title;
@@ -881,12 +1026,14 @@ class _FeatureCard extends StatelessWidget {
   final String? imageUrl;
   final List<Color> gradient;
   final VoidCallback onTap;
+  final bool loading;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
+      onTap: loading ? null : onTap,
       child: DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: gradient),
@@ -921,11 +1068,19 @@ class _FeatureCard extends StatelessWidget {
               Positioned(
                 right: 14,
                 bottom: 13,
-                child: Icon(
-                  Icons.play_arrow_rounded,
-                  color: Colors.white.withValues(alpha: .94),
-                  size: 32,
-                ),
+                child: loading
+                    ? const SizedBox.square(
+                        dimension: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(
+                        icon,
+                        color: Colors.white.withValues(alpha: .94),
+                        size: 32,
+                      ),
               ),
               Padding(
                 padding: const EdgeInsets.all(14),
@@ -1465,6 +1620,68 @@ class _TopAlbumCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 探索发现中的 6 组推荐歌曲。
+class _RecommendedSongCardRail extends StatelessWidget {
+  const _RecommendedSongCardRail({required this.cards, required this.onTap});
+
+  final List<RecommendedSongCard> cards;
+  final ValueChanged<RecommendedSongCard> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppHorizontalRail<RecommendedSongCard>(
+      title: '推荐歌曲',
+      items: cards,
+      height: 172,
+      itemWidth: 120,
+      itemBuilder: (context, card) => _RecommendedSongCardTile(
+        card: card,
+        onTap: () => onTap(card),
+      ),
+    );
+  }
+}
+
+class _RecommendedSongCardTile extends StatelessWidget {
+  const _RecommendedSongCardTile({required this.card, required this.onTap});
+
+  final RecommendedSongCard card;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Artwork(url: card.coverUrl, size: 120, borderRadius: AppRadius.md),
+          const SizedBox(height: 6),
+          Text(
+            card.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+          Text(
+            card.description?.trim().isNotEmpty == true
+                ? card.description!
+                : card.songSummary,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2385,6 +2602,7 @@ class _HomeData {
     required this.albums,
     this.topSongs = const [],
     this.topAlbums = const [],
+    this.recommendedSongCards = const [],
   });
 
   final DailyRecommend daily;
@@ -2392,6 +2610,7 @@ class _HomeData {
   final List<AlbumShopItem> albums;
   final List<Song> topSongs;
   final List<TopAlbumItem> topAlbums;
+  final List<RecommendedSongCard> recommendedSongCards;
 }
 
 class _RadioData {

@@ -546,6 +546,30 @@ class Song {
       artists: parseArtists(json, fallbackName: author),
     );
   }
+
+  /// 推荐歌曲（/top/card）中的歌曲。
+  factory Song.fromTopCard(Map<String, dynamic> json) {
+    final songId = asString(json['songid']);
+    final mixSongId = asString(json['mixsongid']);
+    final authorName = asString(json['author_name']);
+    final artists = parseArtists(json, fallbackName: authorName);
+    final artistName = artists.map((artist) => artist.name).join(' / ');
+    final hash = asString(json['hash']) ?? '';
+    return Song(
+      id: mixSongId ?? songId ?? hash,
+      title: asString(json['songname']) ?? '未知歌曲',
+      artist: artistName.isNotEmpty ? artistName : authorName ?? '未知艺人',
+      hash: hash,
+      albumId: asString(json['album_id']),
+      albumAudioId: mixSongId ?? songId,
+      albumName: asString(json['album_name']),
+      coverUrl: normalizeImageUrl(asString(json['sizable_cover'])),
+      artists: artists,
+      // /top/card 的 time_length 是带小数的秒数（如 259.16）。
+      duration: durationFromTopCardSeconds(json['time_length']),
+    );
+  }
+
   factory Song.fromDaily(Map<String, dynamic> json) {
     final songId = asString(json['songid']) ?? asString(json['audio_id']);
     final artists = parseArtists(
@@ -569,6 +593,26 @@ class Song {
       albumAudioId: asString(json['mixsongid']) ?? songId,
       albumName: asString(json['album_name']),
       coverUrl: normalizeImageUrl(asString(json['sizable_cover'])),
+      artists: artists,
+      duration: durationFromSeconds(json['time_length']),
+    );
+  }
+
+  factory Song.fromPersonalFm(Map<String, dynamic> json) {
+    final songId = asString(json['songid']);
+    final mixSongId = asString(json['mixsongid']);
+    final authorName = asString(json['author_name']);
+    final artists = parseArtists(json, fallbackName: authorName);
+    final artistName = artists.map((artist) => artist.name).join(' / ');
+    final transParam = asMap(json['trans_param']);
+    return Song(
+      id: songId ?? mixSongId ?? asString(json['hash']) ?? '',
+      title: asString(json['songname']) ?? '未知歌曲',
+      artist: artistName.isNotEmpty ? artistName : authorName ?? '未知艺人',
+      hash: asString(json['hash']) ?? '',
+      albumId: asString(json['album_id']),
+      albumAudioId: mixSongId ?? songId,
+      coverUrl: normalizeImageUrl(asString(transParam['union_cover'])),
       artists: artists,
       duration: durationFromSeconds(json['time_length']),
     );
@@ -1738,6 +1782,18 @@ Duration? durationFromSeconds(Object? value) {
   return seconds == null ? null : Duration(seconds: seconds);
 }
 
+Duration? durationFromTopCardSeconds(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  final seconds = value is num
+      ? value.toDouble()
+      : double.tryParse(value.toString());
+  return seconds == null
+      ? null
+      : Duration(milliseconds: (seconds * 1000).round());
+}
+
 Duration? durationFromMilliseconds(Object? value) {
   final milliseconds = asInt(value);
   return milliseconds == null ? null : Duration(milliseconds: milliseconds);
@@ -2158,6 +2214,70 @@ class TopAlbumItem {
       coverUrl: normalizeImageUrl(asString(json['imgurl'])),
       publishTime: asString(json['publishtime']),
       songCount: asInt(json['songcount']),
+    );
+  }
+}
+
+/// 首页“推荐歌曲”（/top/card）。
+class RecommendedSongCard {
+  const RecommendedSongCard({
+    required this.cardId,
+    required this.title,
+    required this.songs,
+    this.description,
+    this.coverUrl,
+  });
+
+  final int cardId;
+  final String title;
+  final String? description;
+  final String? coverUrl;
+  final List<Song> songs;
+
+  String get songSummary {
+    if (songs.isEmpty) return '推荐歌曲';
+    final first = songs.first;
+    return '${first.title} · ${first.artist}';
+  }
+
+  factory RecommendedSongCard.fromJson({
+    required int cardId,
+    required String title,
+    required Map<String, dynamic> json,
+  }) {
+    final songs = asList(json['song_list'])
+        .whereType<Map<String, dynamic>>()
+        .map(Song.fromTopCard)
+        .where((song) => song.hash.isNotEmpty)
+        .toList();
+    return RecommendedSongCard(
+      cardId: cardId,
+      title: title,
+      description: asString(json['rec_desc']),
+      coverUrl: songs.isEmpty ? null : songs.first.coverUrl,
+      songs: songs,
+    );
+  }
+
+  Map<String, dynamic> toCache() => {
+        'cardId': cardId,
+        'title': title,
+        'description': description,
+        'coverUrl': coverUrl,
+        'songs': songs.map((song) => song.toCache()).toList(),
+      };
+
+  factory RecommendedSongCard.fromCache(Map<String, dynamic> json) {
+    return RecommendedSongCard(
+      cardId: asInt(json['cardId']) ?? 0,
+      title: asString(json['title']) ?? '推荐歌曲',
+      description: asString(json['description']),
+      coverUrl: asString(json['coverUrl']),
+      songs: asList(json['songs'])
+          .whereType<Map<String, dynamic>>()
+          .map(Song.fromCache)
+          .where((song) => song.hash.isNotEmpty)
+          .toList(),
     );
   }
 }
