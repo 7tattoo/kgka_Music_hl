@@ -8,12 +8,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
+import android.hardware.display.DisplayManager
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.DynamicsProcessing
@@ -94,11 +96,12 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
 
-        // 车机检测：isAutomotive 判别车机。
+        // 车机检测：isAutomotive 判别车机（含投屏场景）。
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/device")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "isAutomotive" -> result.success(isAutomotiveDevice())
+                    "isCarProjection" -> result.success(isCarProjection())
                     else -> result.notImplemented()
                 }
             }
@@ -772,11 +775,45 @@ class MainActivity : AudioServiceActivity() {
         startActivity(installIntent)
     }
 
-    /// 是否为 Android Automotive 车机设备。
-    /// 仅依赖官方 FEATURE_AUTOMOTIVE 标记：国产定制 AOSP 车机通常未声明，
-    /// 会判为 false，需用户在设置→个性化手动开启车机模式。
+    /// 是否为车机环境（Android Automotive 车机 + 车载投屏 UI 模式）。
     private fun isAutomotiveDevice(): Boolean {
-        return packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
+        // 1. Android Automotive 车机（内置车机）
+        if (packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) return true
+        // 2. 车载 UI 模式（vivo 车联/Android Auto/亿连等投屏会设置）
+        if (isCarUiMode()) return true
+        return false
+    }
+
+    /// 是否为车载投屏 UI 模式。
+    private fun isCarUiMode(): Boolean {
+        return try {
+            val uiMode = resources.configuration.uiMode and Configuration.UI_MODE_TYPE_MASK
+            uiMode == Configuration.UI_MODE_TYPE_CAR
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /// 是否为车载投屏环境（独立于 isAutomotiveDevice 的额外检测）。
+    /// 用于播放页等场景在投屏时自动启用分栏布局。
+    private fun isCarProjection(): Boolean {
+        // 1. 车载 UI 模式
+        if (isCarUiMode()) return true
+        // 2. 检测外接显示（无线投屏到车机等场景）
+        try {
+            val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            val displays = displayManager.displays
+            // 存在非默认外接显示器，可能为投屏场景
+            if (displays.any { it.displayId != DisplayManager.DEFAULT_DISPLAY }) {
+                return true
+            }
+        } catch (_: Exception) {}
+        // 3. 检测 vivo 车联特征（系统属性或服务）
+        try {
+            val vivoCar = packageManager.hasSystemFeature("com.vivo.feature.car")
+            if (vivoCar) return true
+        } catch (_: Exception) {}
+        return false
     }
 
     private fun getAlbumArtBytes(albumId: Long): ByteArray? {

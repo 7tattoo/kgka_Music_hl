@@ -14,11 +14,24 @@ class DeviceInfoService {
     return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   }
 
-  /// 是否为 Android Automotive 车机。
+  /// 是否为 Android Automotive 车机（含投屏 UI 模式）。
   Future<bool> isAutomotive() async {
     if (!isSupportedPlatform) return false;
     try {
       return await _channel.invokeMethod<bool>('isAutomotive') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// 是否为车载投屏环境（外接显示 / vivo 车联等）。
+  /// 比 isAutomotive 更宽泛，用于播放页自动启用分栏布局。
+  Future<bool> isCarProjection() async {
+    if (!isSupportedPlatform) return false;
+    try {
+      return await _channel.invokeMethod<bool>('isCarProjection') ?? false;
     } on PlatformException {
       return false;
     } on MissingPluginException {
