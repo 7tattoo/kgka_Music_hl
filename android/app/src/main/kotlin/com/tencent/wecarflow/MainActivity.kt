@@ -16,6 +16,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.hardware.display.DisplayManager
+import android.view.Display
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.DynamicsProcessing
@@ -804,7 +805,7 @@ class MainActivity : AudioServiceActivity() {
             val displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
             val displays = displayManager.displays
             // 存在非默认外接显示器，可能为投屏场景
-            if (displays.any { it.displayId != DisplayManager.DEFAULT_DISPLAY }) {
+            if (displays.any { it.displayId != Display.DEFAULT_DISPLAY }) {
                 return true
             }
         } catch (_: Exception) {}
