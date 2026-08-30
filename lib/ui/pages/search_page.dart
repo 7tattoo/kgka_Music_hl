@@ -15,7 +15,7 @@ import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import '../adaptive_layout.dart';
-import '../widgets/clickable_artist_text.dart';
+import 'artist_detail_page.dart';
 import 'dart:math' as math;
 
 class SearchPage extends StatefulWidget {
@@ -171,12 +171,24 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _openArtist(Song song) {
-    openArtistDetail(
-      context: context,
-      api: widget.api,
-      auth: widget.auth,
-      player: widget.player,
-      song: song,
+    if (song.source != SongSource.kugou) {
+      Toast.info('其他平台歌曲暂不支持查看歌手');
+      return;
+    }
+    final artist = song.artists.firstWhere(
+      (a) => a.name.isNotEmpty,
+      orElse: () => const ArtistRef(id: '', name: ''),
+    );
+    if (artist.name.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ArtistDetailPage(
+          api: widget.api,
+          auth: widget.auth,
+          artist: artist,
+          player: widget.player,
+        ),
+      ),
     );
   }
 
@@ -1056,12 +1068,12 @@ class _SearchResults extends StatelessWidget {
                                     ),
                               ),
                               const SizedBox(height: 4),
-                              ClickableArtistText(
-                                song: song,
-                                onTap: () => onViewArtist(song),
+                              Text(
+                                song.artist,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
                                       color: active
                                           ? activeColor.withValues(alpha: .72)
                                           : colorScheme.onSurfaceVariant,

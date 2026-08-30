@@ -11,7 +11,6 @@ import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
 import '../adaptive_layout.dart';
-import '../widgets/clickable_artist_text.dart';
 import '../widgets/status_bar_overlay.dart';
 
 /// 已下载歌曲与播放缓存管理页。
@@ -236,11 +235,8 @@ class _DownloadedSongRow extends StatelessWidget {
             ? TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w600)
             : null,
       ),
-      subtitle: ClickableArtistText(
-        song: song,
-        api: api,
-        auth: auth,
-        player: player,
+      subtitle: Text(
+        song.artist,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall,

@@ -1,11 +1,9 @@
-import '../widgets/clickable_artist_text.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../design_tokens.dart';
 import '../adaptive_layout.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/local_music_controller.dart';
-import '../../models/music_models.dart';
 import '../widgets/toast.dart';
 import '../widgets/artwork.dart';
 import '../widgets/now_playing_badge.dart';
@@ -46,15 +44,6 @@ class _LocalSongsPageState extends State<LocalSongsPage> {
     setState(() {
       _searchQuery = _searchController.text.trim().toLowerCase();
     });
-  }
-
-  void _openArtist(Song song) {
-    openArtistDetail(
-      context: context,
-      api: widget.player.api,
-      player: widget.player,
-      song: song,
-    );
   }
 
   Future<void> _requestPermission() async {
@@ -415,15 +404,14 @@ class _LocalSongsPageState extends State<LocalSongsPage> {
                                       color: isCurrent ? colorScheme.primary : colorScheme.onSurface,
                                     ),
                                   ),
-                                   subtitle: ClickableArtistText(
-                                     song: song,
-                                     onTap: () => _openArtist(song),
-                                     maxLines: 1,
-                                     overflow: TextOverflow.ellipsis,
-                                     style: TextStyle(
-                                       color: isCurrent ? colorScheme.primary.withValues(alpha: .7) : colorScheme.onSurfaceVariant,
-                                     ),
-                                   ),
+                                  subtitle: Text(
+                                    song.artist,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: isCurrent ? colorScheme.primary.withValues(alpha: .7) : colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
                                   onTap: () {
                                     widget.player.playSong(song, queue: filteredSongs);
                                   },
