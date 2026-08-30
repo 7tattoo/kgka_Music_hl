@@ -12,6 +12,7 @@ import '../../controllers/local_music_controller.dart';
 import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
 import '../widgets/mini_player.dart';
+import '../widgets/artwork.dart';
 import '../widgets/car_left_player_panel.dart';
 import '../adaptive_layout.dart';
 import 'home_page.dart';
@@ -340,17 +341,17 @@ class _AppShellState extends State<AppShell>
             children: pages,
           ),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom:
-              bottomInset + (useNavRail ? 16 : kBottomNavigationBarHeight + 10),
-          child: MiniPlayer(
-            player: widget.player,
-            auth: widget.auth,
-            onOpenPlayer: _openPlayer,
+        if (useNavRail)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: bottomInset + 16,
+            child: MiniPlayer(
+              player: widget.player,
+              auth: widget.auth,
+              onOpenPlayer: _openPlayer,
+            ),
           ),
-        ),
       ],
     );
 
@@ -406,54 +407,11 @@ class _AppShellState extends State<AppShell>
         body: AdaptiveContentPadding(child: mainContent),
         bottomNavigationBar: useNavRail
             ? null
-            : ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? colorScheme.surfaceContainerHighest.withValues(
-                              alpha: .72,
-                            )
-                          : colorScheme.surfaceContainerHighest.withValues(
-                              alpha: .64,
-                            ),
-                      border: Border(
-                        top: BorderSide(
-                          color: colorScheme.outlineVariant.withValues(
-                            alpha: .38,
-                          ),
-                        ),
-                      ),
-                    ),
-                    child: BottomNavigationBar(
-                      currentIndex: portraitIndex,
-                      onTap: _setPortraitIndex,
-                      backgroundColor: Colors.transparent,
-                      elevation: 0,
-                      selectedItemColor: colorScheme.primary,
-                      unselectedItemColor: colorScheme.onSurface,
-                      selectedLabelStyle: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                      ),
-                      unselectedLabelStyle: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                      ),
-                      items: const [
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.home_outlined),
-                          activeIcon: Icon(Icons.home_rounded),
-                          label: '首页',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Icon(Icons.person_outline_rounded),
-                          activeIcon: Icon(Icons.person_rounded),
-                          label: '我的',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+            : _LiquidGlassBottomBar(
+                currentIndex: portraitIndex,
+                onTap: _setPortraitIndex,
+                player: widget.player,
+                onOpenPlayer: _openPlayer,
               ),
       ),
     ));
@@ -722,4 +680,371 @@ class _NextIntent extends Intent {
 }
 class _PreviousIntent extends Intent {
   const _PreviousIntent();
+}
+
+/// 悬浮胶囊形态的液态玻璃底栏（集成居中圆形音乐封面与环形进度条）。
+class _LiquidGlassBottomBar extends StatelessWidget {
+  const _LiquidGlassBottomBar({
+    required this.currentIndex,
+    required this.onTap,
+    required this.player,
+    required this.onOpenPlayer,
+  });
+
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  final PlayerController player;
+  final VoidCallback onOpenPlayer;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          28,
+          0,
+          28,
+          bottomInset > 0 ? bottomInset : 14,
+        ),
+        child: Container(
+          height: 60,
+          constraints: const BoxConstraints(maxWidth: 360),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(100),
+            // 多层焦散与环境深度阴影
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: .40)
+                    : colorScheme.shadow.withValues(alpha: .12),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: .22)
+                    : colorScheme.shadow.withValues(alpha: .06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+              if (!isDark)
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: .75),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                  offset: const Offset(0, -1),
+                ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(100),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(100),
+                  // 液态玻璃斜向渐变与高透光泽
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [
+                            colorScheme.surfaceContainerHighest.withValues(alpha: .68),
+                            colorScheme.surface.withValues(alpha: .40),
+                          ]
+                        : [
+                            Colors.white.withValues(alpha: .80),
+                            Colors.white.withValues(alpha: .50),
+                          ],
+                  ),
+                  // 菲涅尔高光边缘
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: .18)
+                        : Colors.white.withValues(alpha: .90),
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    _LiquidNavItem(
+                      icon: Icons.home_outlined,
+                      activeIcon: Icons.home_rounded,
+                      label: '首页',
+                      isSelected: currentIndex == 0,
+                      onTap: () => onTap(0),
+                    ),
+                    _CenterPlayerDisc(
+                      player: player,
+                      onOpenPlayer: onOpenPlayer,
+                    ),
+                    _LiquidNavItem(
+                      icon: Icons.person_outline_rounded,
+                      activeIcon: Icons.person_rounded,
+                      label: '我的',
+                      isSelected: currentIndex == 1,
+                      onTap: () => onTap(1),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 底栏中央圆形黑胶唱片封面与环形进度条控制器。
+class _CenterPlayerDisc extends StatefulWidget {
+  const _CenterPlayerDisc({
+    required this.player,
+    required this.onOpenPlayer,
+  });
+
+  final PlayerController player;
+  final VoidCallback onOpenPlayer;
+
+  @override
+  State<_CenterPlayerDisc> createState() => _CenterPlayerDiscState();
+}
+
+class _CenterPlayerDiscState extends State<_CenterPlayerDisc>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 24),
+    );
+    _syncRotation();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CenterPlayerDisc oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncRotation();
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
+
+  void _syncRotation() {
+    if (widget.player.isPlaying) {
+      if (!_rotationController.isAnimating) {
+        _rotationController.repeat();
+      }
+    } else if (_rotationController.isAnimating) {
+      _rotationController.stop(canceled: false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return AnimatedBuilder(
+      animation: widget.player,
+      builder: (context, _) {
+        _syncRotation();
+        final song = widget.player.currentSong;
+        final hasSong = song != null;
+        final durationMs = widget.player.duration.inMilliseconds;
+        final positionMs = widget.player.position.inMilliseconds;
+        final progress = (durationMs > 0 ? (positionMs / durationMs) : 0.0)
+            .clamp(0.0, 1.0);
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onOpenPlayer,
+          onLongPress: () {
+            if (hasSong) {
+              HapticFeedback.lightImpact();
+              widget.player.togglePlay();
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: SizedBox.square(
+              dimension: 46,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 1. 外圈环形播放进度条
+                  SizedBox.square(
+                    dimension: 46,
+                    child: CircularProgressIndicator(
+                      value: hasSong ? progress : 0.0,
+                      strokeWidth: 2.2,
+                      strokeCap: StrokeCap.round,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        colorScheme.primary,
+                      ),
+                      backgroundColor: colorScheme.primary.withValues(
+                        alpha: .18,
+                      ),
+                    ),
+                  ),
+                  // 2. 内部黑胶唱片/专辑封面
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: .20),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: hasSong
+                          ? RotationTransition(
+                              turns: _rotationController,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Artwork(
+                                    url: song.coverUrl,
+                                    size: 38,
+                                    borderRadius: 38,
+                                  ),
+                                  // 唱片同心圆边缘纹理
+                                  DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.white.withValues(alpha: .25),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: const SizedBox.expand(),
+                                  ),
+                                  // 中心轴孔微光
+                                  Center(
+                                    child: Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: colorScheme.surface,
+                                        border: Border.all(
+                                          color: Colors.black.withValues(alpha: .35),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Container(
+                              color: colorScheme.primaryContainer,
+                              child: Icon(
+                                Icons.music_note_rounded,
+                                size: 20,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _LiquidNavItem extends StatelessWidget {
+  const _LiquidNavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final selectedColor = colorScheme.primary;
+    final unselectedColor = colorScheme.onSurfaceVariant.withValues(alpha: .85);
+
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(100),
+          splashColor: selectedColor.withValues(alpha: .12),
+          highlightColor: selectedColor.withValues(alpha: .06),
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(100),
+                color: isSelected
+                    ? selectedColor.withValues(alpha: .10)
+                    : Colors.transparent,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    transitionBuilder: (child, anim) => ScaleTransition(
+                      scale: anim,
+                      child: child,
+                    ),
+                    child: Icon(
+                      isSelected ? activeIcon : icon,
+                      key: ValueKey<bool>(isSelected),
+                      color: isSelected ? selectedColor : unselectedColor,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color: isSelected ? selectedColor : unselectedColor,
+                      height: 1.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
