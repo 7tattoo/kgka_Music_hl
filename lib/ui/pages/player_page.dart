@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import '../design_tokens.dart';
+import '../widgets/status_bar_overlay.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lyric/flutter_lyric.dart';
@@ -32,10 +34,12 @@ class PlayerPage extends StatefulWidget {
     super.key,
     required this.player,
     required this.auth,
+    this.onClose, // 新增：由宿主（AppShell）提供关闭回调
   });
 
   final PlayerController player;
   final AuthController auth;
+  final VoidCallback? onClose; // 新增
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -56,7 +60,6 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void dispose() {
     unawaited(_setKeepScreenOn(false));
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
@@ -84,7 +87,7 @@ class _PlayerPageState extends State<PlayerPage> {
           player: widget.player,
           auth: widget.auth,
           song: song,
-          onClose: () => Navigator.of(context).pop(),
+          onClose: widget.onClose ?? () => Navigator.of(context).pop(),
           onQueue: () => _showQueue(context),
         );
       },
@@ -179,7 +182,6 @@ class _PlayerBodyState extends State<_PlayerBody> {
 
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _pageController.dispose();
     super.dispose();
   }
@@ -198,16 +200,13 @@ class _PlayerBodyState extends State<_PlayerBody> {
     // 横屏分栏布局是车机专属，普通横屏仍用竖屏的翻页布局。
     final isCarLayout = landscape && ThemeController.instance.carModeEnabled;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.light,
-      ),
+    return StatusBarOverlay(
+      brightness: Brightness.dark,
       child: Scaffold(
-        backgroundColor: Colors.black,
-        body: Stack(
-          children: [
-            _ArtworkBackground(song: widget.song),
+          backgroundColor: Colors.black,
+          body: Stack(
+            children: [
+              _ArtworkBackground(song: widget.song),
             SafeArea(
               // 横屏时同样需要处理顶部状态栏和底部系统导航栏（如车机空调控制栏）的遮挡。
               // 竖屏已由外层 Scaffold 处理，这里对所有方向统一保留 SafeArea。
@@ -276,12 +275,16 @@ class _PlayerBodyState extends State<_PlayerBody> {
       return;
     }
     _lastSystemUiLandscape = landscape;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    });
+    // 仅在 Android 上保持沉浸式全屏；iOS 上重置 SystemUiMode 会污染状态栏前景色，
+    // 由本页的 StatusBarOverlay（及全局 _SystemUiOverlay）负责状态栏样式。
+    if (Platform.isAndroid) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      });
+    }
   }
 
   bool _handlePageScrollNotification(ScrollNotification notification) {
@@ -1775,8 +1778,10 @@ class _LyricPlayerPageState extends State<_LyricPlayerPage>
             lyricScale: _lyricScale,
           ),
           // 字体大小调节按钮（左侧底部）
+          // left:64 避开 AppShell 覆盖层的左缘 60px opaque 手势条，
+          // 否则"缩小歌词"按钮会被手势条拦截（无法点击）。
           Positioned(
-            left: 0,
+            left: 64,
             bottom: 16,
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -2461,13 +2466,17 @@ class _CommentEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 评论按钮（在左侧）
-          if (song.source == SongSource.kugou)
+    // 按钮组靠右对齐（用户要求放最右边）；右缘无手势条，不会被遮挡，
+    // 也自然避开了左缘 60px opaque 手势条。
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 评论按钮（在左侧）
+            if (song.source == SongSource.kugou)
             Material(
               color: Colors.transparent,
               child: InkWell(
@@ -2519,6 +2528,7 @@ class _CommentEntry extends StatelessWidget {
           ),
         ],
       ),
+      ),
     );
   }
 }
@@ -2551,3 +2561,4 @@ class _PageDots extends StatelessWidget {
     );
   }
 }
+

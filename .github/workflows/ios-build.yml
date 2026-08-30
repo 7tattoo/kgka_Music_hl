@@ -1,53 +1,161 @@
-name: Build iOS IPA for TrollStore
+name: Build Unsigned iOS IPA
 
+# 触发条件：
+#   1. 推送到 master 或 main 分支时自动构建（满足你的需求）
+#   2. 推送 v* 标签时构建并自动发布 GitHub Release
+#   3. 也可在 Actions 页面手动触发 (workflow_dispatch)
 on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
 
+# 创建 Release 需要写权限；删除旧的 workflow run 需要 actions 写权限
+permissions:
+  contents: write
+  actions: write
+
 jobs:
-  build:
-    name: Build Unsigned IPA
+  build-ipa:
+    name: Build Unsigned IPA (macOS)
     runs-on: macos-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          lfs: false
+          # 拉取 Git LFS 内容（lib/assets/logo.png 是 LFS 跟踪，AppIcon 需要真实图片）
+          lfs: true
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          cache: true
+
+      - name: Disable Flutter analytics
+        run: flutter config --no-analytics
 
       - name: Install dependencies
         run: flutter pub get
 
+      # 重建 iOS 工程（保证 Xcode 工程与当前 Flutter 版本匹配），
+      # 并补上“后台音频播放”权限（音乐类 App 必需）
       - name: Recreate iOS project
         run: |
-          # 完全删除并重建 iOS 项目
           rm -rf ios/
           flutter create --platforms=ios .
-          
-          # 添加后台音频权限到 Info.plist
-          cd ios/Runner
-          /usr/libexec/PlistBuddy -c "Add UIBackgroundModes array" Info.plist
-          /usr/libexec/PlistBuddy -c "Add UIBackgroundModes:0 string audio" Info.plist
-          cd ../..
+          # Flutter 3.47.x 的 _missingDevelopmentTeam() 通过
+          # buildSettings.containsKey('DEVELOPMENT_TEAM') 判断是否有 Team，
+          # 而 flutter create 未指定 team 时该键根本不存在，会偶发误报
+          # "requires a selected Development Team"。这里注入占位值让键存在
+          # （值无所谓，--no-codesign 仍会跳过实际签名）。
+          # 注意：CODE_SIGN_STYLE 只出现在 RunnerTests target 配置里，
+          # Runner target 必须用 INFOPLIST_FILE = Runner/Info.plist; 作为锚点。
+          perl -pi -e 's/(\t*INFOPLIST_FILE = Runner\/Info\.plist;)/$1\n\t\t\t\tDEVELOPMENT_TEAM = 0000000000;/' ios/Runner.xcodeproj/project.pbxproj
+          # 校验注入成功（三个 Runner 配置都应命中）
+          grep -c "DEVELOPMENT_TEAM = 0000000000" ios/Runner.xcodeproj/project.pbxproj
+          /usr/libexec/PlistBuddy -c "Add UIBackgroundModes array" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add UIBackgroundModes:0 string audio" ios/Runner/Info.plist
+          # 应用显示名称改为「KA Music」（iOS 工程每次都会重建，故在此设置）
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName KA Music" ios/Runner/Info.plist || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string KA Music" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName KA Music" ios/Runner/Info.plist || /usr/libexec/PlistBuddy -c "Add :CFBundleName string KA Music" ios/Runner/Info.plist
 
+      # 替换 AppIcon：用 lib/assets/logo.png（1024x1024）生成全部 iOS 图标尺寸。
+      # flutter create 重建工程后 AppIcon 是 Flutter 默认图标，这里用 sips（macOS
+      # 自带，无需额外依赖）从 logo 缩放生成并覆盖。
+      - name: Replace AppIcon with logo
+        run: |
+          LOGO=lib/assets/logo.png
+          DIR=ios/Runner/Assets.xcassets/AppIcon.appiconset
+          # 校验 logo 已由 LFS 拉取为真实图片（PNG 魔数）
+          if [ "$(head -c4 "$LOGO")" != "$(printf '\x89PNG')" ]; then
+            echo "❌ logo.png 不是真实 PNG（可能是 LFS pointer 未拉取）"
+            exit 1
+          fi
+          # 生成各尺寸（文件名必须与 Contents.json 一致）
+          gen() { # $1=文件名 $2=像素
+            sips -z "$2" "$2" "$LOGO" --out "$DIR/$1" >/dev/null
+            echo "  ✓ $1 ($2x$2)"
+          }
+          gen Icon-App-1024x1024@1x.png 1024
+          gen Icon-App-83.5x83.5@2x.png 167
+          gen Icon-App-76x76@2x.png 152
+          gen Icon-App-76x76@1x.png 76
+          gen Icon-App-60x60@3x.png 180
+          gen Icon-App-60x60@2x.png 120
+          gen Icon-App-40x40@3x.png 120
+          gen Icon-App-40x40@2x.png 80
+          gen Icon-App-40x40@1x.png 40
+          gen Icon-App-29x29@3x.png 87
+          gen Icon-App-29x29@2x.png 58
+          gen Icon-App-29x29@1x.png 29
+          gen Icon-App-20x20@3x.png 60
+          gen Icon-App-20x20@2x.png 40
+          gen Icon-App-20x20@1x.png 20
+          echo "✅ AppIcon 已替换为 logo"
+
+      # 未签名打包：--no-codesign 跳过所有签名步骤，无需证书/描述文件
+      # 显式关闭所有签名步骤，避免 Flutter 3.47.x 在缓存命中（复用已构建 Runner.app）时
+      # 仍触发 "DEVELOPMENT_TEAM required" 的 post-build 检查而失败
       - name: Build iOS app (unsigned)
         run: |
+          export CODE_SIGNING_ALLOWED=NO
+          export CODE_SIGNING_REQUIRED=NO
+          export CODE_SIGN_IDENTITY=""
+          export DEVELOPMENT_TEAM=""
           flutter build ios --release --no-codesign
 
-      - name: Create IPA
+      # 将生成的 Runner.app 打包成未签名 .ipa（Payload 目录 + zip）
+      - name: Package unsigned IPA
         run: |
           mkdir -p Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           zip -r kgka_music.ipa Payload
-          echo "✅ IPA created successfully!"
+          echo "✅ IPA created: $(du -h kgka_music.ipa | cut -f1)"
+          rm -rf Payload
 
-      - name: Upload IPA
+      # 方式一：通过工作流产物 (Artifacts) 提供下载（每次分支推送都会生成）
+      - name: Upload IPA as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kgka-music-unsigned
+          name: kgka-music-unsigned-ipa
           path: kgka_music.ipa
           retention-days: 30
+
+      # 方式二：推送 v* 标签时，自动创建 GitHub Release 并附上 .ipa
+      - name: Create GitHub Release (on tag push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: KA Music ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: kgka_music.ipa
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 自动清理：只保留最近 10 个 workflow run（含本次），删除更早的历史构建。
+      # 每次构建完成后运行，避免手动清理。Release 附带的 IPA 不受影响。
+      - name: Cleanup old workflow runs (keep latest 10)
+        shell: bash
+        run: |
+          # 按时间倒序列出所有 run id（最新在前）
+          RUN_IDS=$(gh api \
+            "repos/${{ github.repository }}/actions/runs?per_page=100&page=1" \
+            --jq '.workflow_runs[].id' | sort -rn | head -100)
+          COUNT=0
+          for ID in $RUN_IDS; do
+            COUNT=$((COUNT + 1))
+            if [ $COUNT -gt 10 ]; then
+              echo "Deleting run $ID (position $COUNT)"
+              gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$ID" \
+                --silent || echo "  (skip: $ID 删除失败或已删除)"
+            fi
+          done
+          echo "保留最近 10 个 run，共检查 $COUNT 个"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'design_tokens.dart';
 
 class AppTheme {
@@ -82,6 +83,19 @@ class AppTheme {
             : Colors.transparent,
         surfaceTintColor: Colors.transparent,
         foregroundColor: scheme.onSurface,
+        // AppBar 会创建自己的 AnnotatedRegion 并覆盖页面级状态栏设置；
+        // backgroundColor 为 transparent 时 Flutter 会推断为深色背景而强制白字，
+        // 导致浅色页面状态栏文字（白字）不可见。必须显式指定。
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          // iOS：描述状态栏【背景】明暗 → 浅色背景用 Brightness.light（黑字）
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+          // Android：描述【前景】图标/文字明暗（与上者相反）
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          systemNavigationBarColor: scheme.surface,
+          systemNavigationBarIconBrightness:
+              isDark ? Brightness.light : Brightness.dark,
+        ),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(

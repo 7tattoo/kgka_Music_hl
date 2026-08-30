@@ -12,10 +12,16 @@ import 'artwork.dart';
 import 'toast.dart';
 
 class MiniPlayer extends StatelessWidget {
-  const MiniPlayer({super.key, required this.player, required this.auth});
+  const MiniPlayer({
+    super.key,
+    required this.player,
+    required this.auth,
+    this.onOpenPlayer, // 可选：AppShell 宿主提供则走 Stack 覆盖层；否则路由兜底
+  });
 
   final PlayerController player;
   final AuthController auth;
+  final VoidCallback? onOpenPlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -68,11 +74,7 @@ class MiniPlayer extends StatelessWidget {
                   ],
                 ),
                 child: InkWell(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => PlayerPage(player: player, auth: auth),
-                    ),
-                  ),
+                  onTap: onOpenPlayer ?? () => _openPlayerByRoute(context),
                   child: SizedBox(
                     height: 64,
                     child: Stack(
@@ -195,6 +197,82 @@ class MiniPlayer extends StatelessWidget {
             ),
           ),
         );
+        },
+      ),
+    );
+  }
+
+  /// 路由兜底：非 AppShell 宿主（搜索/歌单详情/云盘等页面）仍以路由方式打开
+  /// 播放页。使用自定义 PageRouteBuilder（非 iOS 系统 Modal 转场），
+  /// 避免系统级退场模糊；并与 AppShell 覆盖层保持一致：ClipRect 裁剪
+  /// 播放页内放大溢出的模糊封面（消除关闭时的模糊遮罩）+ 左缘 60px
+  /// opaque 手势条（右滑关闭）。
+  void _openPlayerByRoute(BuildContext context) {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            PlayerPage(player: player, auth: auth),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          var dragStartValue = 1.0;
+          var dragDistance = 0.0;
+          final screenWidth = MediaQuery.sizeOf(context).width;
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: animation,
+                  builder: (context, _) {
+                    final offsetX = (1.0 - animation.value) * screenWidth;
+                    return Transform.translate(
+                      offset: Offset(offsetX, 0),
+                      child: ClipRect(child: child),
+                    );
+                  },
+                ),
+              ),
+              // 左缘手势条（TopBar 之下）：opaque 独占左缘触摸，右滑关闭。
+              Positioned(
+                left: 0,
+                top: MediaQuery.paddingOf(context).top + 64,
+                bottom: 0,
+                width: 60,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onHorizontalDragStart: (details) {
+                    dragStartValue = animation.value;
+                    dragDistance = 0;
+                  },
+                  onHorizontalDragUpdate: (details) {
+                    final delta = details.primaryDelta ?? 0;
+                    dragDistance += delta;
+                    final progress = (dragStartValue - (dragDistance / screenWidth))
+                        .clamp(0.0, 1.0);
+                    final controller = animation as AnimationController;
+                    controller.value = progress;
+                  },
+                  onHorizontalDragEnd: (details) {
+                    final velocity = details.primaryVelocity ?? 0;
+                    final controller = animation as AnimationController;
+                    final shouldClose = dragDistance > screenWidth * 0.25 ||
+                        (velocity > 200 && dragDistance > 0);
+                    dragDistance = 0;
+                    if (shouldClose) {
+                      controller.animateTo(0.0).then((_) {
+                        final route = ModalRoute.of(context);
+                        if (route?.isCurrent ?? false) {
+                          Navigator.of(context).maybePop();
+                        }
+                      });
+                    } else {
+                      controller.animateBack(1.0);
+                    }
+                  },
+                ),
+              ),
+            ],
+          );
         },
       ),
     );
