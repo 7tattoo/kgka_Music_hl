@@ -10,7 +10,7 @@ import '../widgets/artwork.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
-import 'artist_detail_page.dart';
+import '../widgets/clickable_artist_text.dart';
 import '../adaptive_layout.dart';
 
 /// 用户云盘音乐页面。
@@ -134,20 +134,12 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
   }
 
   void _openArtist(Song song) {
-    final artist = song.artists.firstWhere(
-      (a) => a.name.isNotEmpty,
-      orElse: () => const ArtistRef(id: '', name: ''),
-    );
-    if (artist.name.isEmpty) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ArtistDetailPage(
-          api: widget.api,
-          auth: widget.auth,
-          artist: artist,
-          player: widget.player,
-        ),
-      ),
+    openArtistDetail(
+      context: context,
+      api: widget.api,
+      auth: widget.auth,
+      player: widget.player,
+      song: song,
     );
   }
 
@@ -526,8 +518,9 @@ class _CloudSongRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 3),
-                      Text(
-                        song.artist,
+                      ClickableArtistText(
+                        song: song,
+                        onTap: onViewArtist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(

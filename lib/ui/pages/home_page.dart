@@ -19,7 +19,7 @@ import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import 'album_shop_page.dart';
-import 'artist_detail_page.dart';
+import '../widgets/clickable_artist_text.dart';
 import 'playlist_detail_page.dart';
 import 'search_page.dart';
 import '../../controllers/theme_controller.dart';
@@ -458,20 +458,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _openArtist(Song song) {
-    final artist = song.artists.firstWhere(
-      (a) => a.name.isNotEmpty,
-      orElse: () => const ArtistRef(id: '', name: ''),
-    );
-    if (artist.name.isEmpty) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ArtistDetailPage(
-          api: widget.api,
-          auth: widget.auth,
-          artist: artist,
-          player: widget.player,
-        ),
-      ),
+    openArtistDetail(
+      context: context,
+      api: widget.api,
+      auth: widget.auth,
+      player: widget.player,
+      song: song,
     );
   }
 
@@ -589,6 +581,7 @@ class _HomePageState extends State<HomePage> {
                               _TopSongRail(
                                 songs: data.topSongs,
                                 onPlay: (song) => _playSong(song, data.topSongs),
+                                onArtistTap: _openArtist,
                               ),
                             if (data.topAlbums.isNotEmpty)
                               _TopAlbumRail(
@@ -1387,12 +1380,12 @@ class _HomeSongRow extends StatelessWidget {
                               ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          song.artist,
+                        ClickableArtistText(
+                          song: song,
+                          onTap: onViewArtist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: active
                                     ? activeColor.withValues(alpha: .72)
                                     : colorScheme.onSurfaceVariant,
@@ -1477,10 +1470,15 @@ class _HomeSongRow extends StatelessWidget {
 
 /// 新歌速递横向区块。
 class _TopSongRail extends StatelessWidget {
-  const _TopSongRail({required this.songs, required this.onPlay});
+  const _TopSongRail({
+    required this.songs,
+    required this.onPlay,
+    this.onArtistTap,
+  });
 
   final List<Song> songs;
   final ValueChanged<Song> onPlay;
+  final ValueChanged<Song>? onArtistTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1493,16 +1491,22 @@ class _TopSongRail extends StatelessWidget {
       itemBuilder: (context, song) => _TopSongCard(
         song: song,
         onTap: () => onPlay(song),
+        onArtistTap: onArtistTap != null ? () => onArtistTap!(song) : null,
       ),
     );
   }
 }
 
 class _TopSongCard extends StatelessWidget {
-  const _TopSongCard({required this.song, required this.onTap});
+  const _TopSongCard({
+    required this.song,
+    required this.onTap,
+    this.onArtistTap,
+  });
 
   final Song song;
   final VoidCallback onTap;
+  final VoidCallback? onArtistTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1524,8 +1528,9 @@ class _TopSongCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
           ),
-          Text(
-            song.artist,
+          ClickableArtistText(
+            song: song,
+            onTap: onArtistTap,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(

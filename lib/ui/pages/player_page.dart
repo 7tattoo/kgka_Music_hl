@@ -24,7 +24,7 @@ import '../widgets/playback_speed_sheet.dart';
 import '../widgets/sleep_timer_sheet.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
-import 'artist_detail_page.dart';
+import '../widgets/clickable_artist_text.dart';
 import 'comment_page.dart';
 import 'desktop_lyrics_settings_page.dart';
 import 'rhythm_game/rhythm_game_page.dart';
@@ -319,62 +319,12 @@ class _PlayerBodyState extends State<_PlayerBody> {
   }
 
   Future<void> _openArtist(Song song) async {
-    if (song.source != SongSource.kugou) {
-      Toast.info('其他平台歌曲暂不支持查看歌手');
-      return;
-    }
-    final artists = song.artists;
-    if (artists.isEmpty) {
-      Toast.info('暂无歌手详情');
-      return;
-    }
-
-    ArtistRef? selected;
-    if (artists.length == 1) {
-      selected = artists.first;
-    } else {
-      selected = await showModalBottomSheet<ArtistRef>(
-        context: context,
-        showDragHandle: true,
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        builder: (context) {
-          return SafeArea(
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              itemCount: artists.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 4),
-              itemBuilder: (context, index) {
-                final artist = artists[index];
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage: artist.avatarUrl == null
-                        ? null
-                        : NetworkImage(artist.avatarUrl!),
-                    child: artist.avatarUrl == null
-                        ? const Icon(Icons.person_rounded)
-                        : null,
-                  ),
-                  title: Text(artist.name),
-                  onTap: () => Navigator.of(context).pop(artist),
-                );
-              },
-            ),
-          );
-        },
-      );
-    }
-
-    if (selected == null || !mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ArtistDetailPage(
-          api: widget.player.api,
-          auth: widget.auth,
-          artist: selected!,
-          player: widget.player,
-        ),
-      ),
+    await openArtistDetail(
+      context: context,
+      api: widget.player.api,
+      auth: widget.auth,
+      player: widget.player,
+      song: song,
     );
   }
 }
@@ -570,6 +520,7 @@ class _LandscapePlayerContent extends StatelessWidget {
                       flex: 12,
                       child: _LandscapeRightPanel(
                         player: player,
+                        auth: auth,
                         onQueue: onQueue,
                         compact: compact,
                       ),
@@ -636,12 +587,14 @@ class _LandscapeHeader extends StatelessWidget {
                       ),
                     ),
                     if (!compact)
-                      Text(
-                        song.artist,
+                      ClickableArtistText(
+                        song: song,
+                        api: player.api,
+                        auth: auth,
+                        player: player,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Colors.white.withValues(alpha: .7),
                               fontWeight: FontWeight.w700,
                             ),
@@ -946,11 +899,13 @@ class _LandscapeArtworkShowcaseState extends State<_LandscapeArtworkShowcase>
 class _LandscapeRightPanel extends StatelessWidget {
   const _LandscapeRightPanel({
     required this.player,
+    required this.auth,
     required this.onQueue,
     required this.compact,
   });
 
   final PlayerController player;
+  final AuthController auth;
   final VoidCallback onQueue;
   final bool compact;
 
@@ -984,8 +939,11 @@ class _LandscapeRightPanel extends StatelessWidget {
                           ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      song.artist,
+                    ClickableArtistText(
+                      song: song,
+                      api: player.api,
+                      auth: auth,
+                      player: player,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -1205,8 +1163,11 @@ class _TopBar extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    Text(
-                      song.artist,
+                    ClickableArtistText(
+                      song: song,
+                      api: player.api,
+                      auth: auth,
+                      player: player,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(

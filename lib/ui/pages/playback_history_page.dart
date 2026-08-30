@@ -12,7 +12,7 @@ import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
 import '../widgets/toast.dart';
 import '../adaptive_layout.dart';
-import 'artist_detail_page.dart';
+import '../widgets/clickable_artist_text.dart';
 
 /// 播放历史页面：展示最近播放的歌曲列表，支持点击播放和清空。
 class PlaybackHistoryPage extends StatefulWidget {
@@ -74,20 +74,12 @@ class _PlaybackHistoryPageState extends State<PlaybackHistoryPage> {
   }
 
   void _openArtist(Song song) {
-    final artist = song.artists.firstWhere(
-      (a) => a.name.isNotEmpty,
-      orElse: () => const ArtistRef(id: '', name: ''),
-    );
-    if (artist.name.isEmpty) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ArtistDetailPage(
-          api: widget.api,
-          auth: widget.auth,
-          artist: artist,
-          player: widget.player,
-        ),
-      ),
+    openArtistDetail(
+      context: context,
+      api: widget.api,
+      auth: widget.auth,
+      player: widget.player,
+      song: song,
     );
   }
 
@@ -317,8 +309,9 @@ class _HistorySongRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 3),
-                      Text(
-                        song.artist,
+                      ClickableArtistText(
+                        song: song,
+                        onTap: onViewArtist,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
