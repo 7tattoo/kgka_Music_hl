@@ -16,8 +16,10 @@ import '../services/cache_service.dart';
 import '../services/desktop_lyrics_service.dart';
 import '../services/music_api.dart';
 import '../services/music_audio_handler.dart';
+import '../services/bluetooth_lyrics_service.dart';
 import '../services/playback_history_service.dart';
 import '../services/playback_stats_service.dart';
+import '../services/super_lyric_service.dart';
 import 'download_controller.dart';
 import 'local_music_controller.dart';
 
@@ -52,6 +54,8 @@ class PlayerController extends ChangeNotifier {
       'settings.auto_play_on_device_connected';
   static const _volumeNormalizationEnabledSettingKey =
       'settings.volume_normalization_enabled';
+  static const _bluetoothLyricsEnabledSettingKey =
+      'settings.bluetooth_lyrics_enabled';
   static const _queueKey = 'playback.queue';
   static const _currentSongKey = 'playback.current_song';
   static const _currentPositionKey = 'playback.current_position';
@@ -100,6 +104,7 @@ class PlayerController extends ChangeNotifier {
 
   PlayerController(this._api, this._audioHandler) {
     unawaited(_restoreSettings());
+    unawaited(_superLyric.registerPublisher());
     _audioHandler.attachTransportControls(onNext: next, onPrevious: previous);
     _desktopLyrics.setVisibilityChangedHandler(_handleDesktopLyricsVisibility);
     _positionSub = audioPlayer.positionStream.listen((value) {
@@ -109,6 +114,8 @@ class PlayerController extends ChangeNotifier {
       _maybeCompleteFromPosition(value);
       _maybeStopClimaxPreview(value);
       _maybeSyncDesktopLyricFromPosition();
+      _syncSuperLyricFromPosition();
+      _syncBluetoothLyricsFromPosition();
       notifyListeners();
     });
     // Send timing anchors; Android animates karaoke progress at display refresh.
@@ -163,6 +170,8 @@ class PlayerController extends ChangeNotifier {
   final DesktopLyricsService _desktopLyrics = DesktopLyricsService();
   final PlaybackHistoryService _historyService = PlaybackHistoryService();
   final PlaybackStatsService _statsService = PlaybackStatsService();
+  final SuperLyricService _superLyric = SuperLyricService();
+  final BluetoothLyricsService _bluetoothLyrics = BluetoothLyricsService();
 
   AudioPlayer get audioPlayer => _audioHandler.audioPlayer;
 
@@ -238,6 +247,7 @@ class PlayerController extends ChangeNotifier {
   bool autoResumeAfterInterruption = false;
   bool autoPlayOnDeviceConnected = false;
   bool volumeNormalizationEnabled = false;
+  bool bluetoothLyricsEnabled = false;
   bool desktopLyricsEnabled = false;
   DesktopLyricsSettings desktopLyricsSettings = const DesktopLyricsSettings();
   Timer? _autoResumeTimer;
@@ -384,6 +394,10 @@ class PlayerController extends ChangeNotifier {
     }
     lyrics = const [];
     _lastDesktopLyricIndex = -1;
+    _lastSuperLyricIndex = -1;
+    _lastSuperLyricPlaying = true;
+    _lastBluetoothLyricIndex = -1;
+    _lastBluetoothPlaying = true;
     _saveQueueState();
     _startPositionSaving();
     notifyListeners();
@@ -664,6 +678,38 @@ class PlayerController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_volumeNormalizationEnabledSettingKey, enabled);
     await _applyVolumeNormalization();
+    notifyListeners();
+  }
+
+  /// 车载蓝牙歌词功能是否受支持（仅 Android）。
+  bool get isBluetoothLyricsSupported => BluetoothLyricsService.isSupportedPlatform;
+
+  /// 开关车载蓝牙歌词功能。
+  Future<void> setBluetoothLyricsEnabled(bool enabled) async {
+    if (bluetoothLyricsEnabled == enabled) return;
+    bluetoothLyricsEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_bluetoothLyricsEnabledSettingKey, enabled);
+    // 关闭时，清理残留广播
+    if (!enabled && currentSong != null) {
+      unawaited(
+        _bluetoothLyrics.broadcastMetaChanged(
+          title: currentSong!.title,
+          artist: currentSong!.artist,
+          album: currentSong!.albumName,
+          lyric: '',
+          position: position,
+          duration: currentSong!.duration ?? Duration.zero,
+          playing: isPlaying,
+          trackIndex: currentIndex,
+          listSize: queue.length,
+        ),
+      );
+      _audioHandler.updateLyricMetadata(lyricText: null);
+    } else if (enabled) {
+      // 打开时立即推送一次当前状态
+      _pushBluetoothLyricForCurrentLine(force: true);
+    }
     notifyListeners();
   }
 
@@ -1354,6 +1400,12 @@ class PlayerController extends ChangeNotifier {
   }
 
   int _lastDesktopLyricIndex = -1;
+  int _lastSuperLyricIndex = -1;
+  // 初始为 false：App 启动时通常处于暂停态，若初始为 true，
+  // 首个 position tick 就会向系统发送一次无意义的 stop/playstate 广播。
+  bool _lastSuperLyricPlaying = false;
+  int _lastBluetoothLyricIndex = -1;
+  bool _lastBluetoothPlaying = false;
 
   void _maybeSyncDesktopLyricFromPosition() {
     if (!_shouldShowDesktopLyrics || lyrics.isEmpty) return;
@@ -1364,6 +1416,138 @@ class PlayerController extends ChangeNotifier {
     }
     // Karaoke progress for current line
     _syncDesktopKaraokeProgress();
+  }
+
+  void _syncSuperLyricFromPosition() {
+    if (currentSong == null) return;
+    if (lyrics.isEmpty) {
+      // 无歌词时仅处理播放状态变化
+      if (!isPlaying && _lastSuperLyricPlaying) {
+        _lastSuperLyricPlaying = false;
+        _lastSuperLyricIndex = -1;
+        unawaited(_superLyric.sendStop());
+      } else if (isPlaying && !_lastSuperLyricPlaying) {
+        _lastSuperLyricPlaying = true;
+      }
+      return;
+    }
+    final index = activeLyricIndex;
+    // 行变化且正在播放 → 发歌词
+    final lineChanged = isPlaying && (index != _lastSuperLyricIndex);
+    // 从暂停切到播放 → 重新发送当前行
+    final resumed = isPlaying && !_lastSuperLyricPlaying;
+    if (lineChanged || resumed) {
+      _lastSuperLyricIndex = index;
+      _lastSuperLyricPlaying = true;
+      final clampedIndex = index.clamp(0, lyrics.length - 1);
+      final line = lyrics[clampedIndex];
+      final lineEndTime = line.time +
+          (line.duration ?? _estimatedLineDuration(clampedIndex) ?? Duration.zero);
+      unawaited(
+        _superLyric.sendLyric(
+          song: currentSong!,
+          line: line,
+          lineEndTime: lineEndTime,
+        ),
+      );
+    } else if (!isPlaying && _lastSuperLyricPlaying) {
+      // 切到暂停：发送 stop
+      _lastSuperLyricPlaying = false;
+      unawaited(_superLyric.sendStop());
+    }
+  }
+
+  /// 位置流中的车载蓝牙歌词同步入口。
+  void _syncBluetoothLyricsFromPosition() {
+    if (!bluetoothLyricsEnabled) return;
+    if (currentSong == null) return;
+    final index = lyrics.isEmpty ? -1 : activeLyricIndex;
+    final lineChanged = index != _lastBluetoothLyricIndex;
+    final playingChanged = isPlaying != _lastBluetoothPlaying;
+    // 状态或行变化时推送
+    if (lineChanged || playingChanged) {
+      _pushBluetoothLyricForCurrentLine(
+        index: index,
+        forcePlayState: playingChanged,
+      );
+    }
+  }
+
+  /// 推送当前行歌词到车载蓝牙（MediaSession extras + 系统广播）。
+  ///
+  /// - [force]：忽略行/状态缓存直接发送一次（用于用户刚打开开关时）
+  /// - [index]：当前歌词行索引，-1 表示无歌词；默认取 activeLyricIndex
+  /// - [forcePlayState]：即使行未变也发送 playStateChanged 广播
+  void _pushBluetoothLyricForCurrentLine({
+    bool force = false,
+    int? index,
+    bool forcePlayState = false,
+  }) {
+    if (!bluetoothLyricsEnabled || currentSong == null) return;
+    final song = currentSong!;
+    final resolvedIndex = index ?? (lyrics.isEmpty ? -1 : activeLyricIndex);
+    // 行变化判定基准快照（下方 if/else 会更新 _lastBluetoothLyricIndex）
+    final prevIndex = _lastBluetoothLyricIndex;
+
+    final String lyricText;
+    final String? translationText;
+    final String? romanizationText;
+    if (lyrics.isEmpty || resolvedIndex < 0) {
+      lyricText = '';
+      translationText = null;
+      romanizationText = null;
+      _lastBluetoothLyricIndex = -1;
+    } else {
+      final clampedIndex = resolvedIndex.clamp(0, lyrics.length - 1);
+      final line = lyrics[clampedIndex];
+      lyricText = line.text;
+      translationText = line.translation;
+      romanizationText = line.romanization;
+      _lastBluetoothLyricIndex = clampedIndex;
+    }
+
+    _lastBluetoothPlaying = isPlaying;
+
+    // 1. MediaSession extras 歌词字段（部分 App/Xposed 读取 MediaSession）
+    _audioHandler.updateLyricMetadata(
+      lyricText: lyricText.isEmpty ? null : lyricText,
+      translationText: translationText,
+      romanizationText: romanizationText,
+    );
+
+    // 2. 系统广播 + 各 App 自定义广播
+    // 行变化判定必须用快照对比：不能用恒真的 lyricText.isNotEmpty，
+    // 否则 lineChanged 恒真、forcePlayState 分支永远无法执行，
+    // 播放/暂停状态广播会被静默吞掉。
+    final lineChanged = force || prevIndex != _lastBluetoothLyricIndex;
+    if (lineChanged) {
+      unawaited(
+        _bluetoothLyrics.broadcastMetaChanged(
+          title: song.title,
+          artist: song.artist,
+          album: song.albumName,
+          lyric: lyricText,
+          position: position,
+          duration: song.duration ?? Duration.zero,
+          playing: isPlaying,
+          trackIndex: currentIndex,
+          listSize: queue.length,
+        ),
+      );
+    }
+    // 播放/暂停状态变化独立发送，不依赖行是否变化。
+    if (forcePlayState) {
+      unawaited(
+        _bluetoothLyrics.broadcastPlayStateChanged(
+          title: song.title,
+          artist: song.artist,
+          album: song.albumName,
+          position: position,
+          duration: song.duration ?? Duration.zero,
+          playing: isPlaying,
+        ),
+      );
+    }
   }
 
   void _syncDesktopKaraokeProgress() {
@@ -1592,6 +1776,9 @@ class PlayerController extends ChangeNotifier {
     volumeNormalizationEnabled =
         prefs.getBool(_volumeNormalizationEnabledSettingKey) ??
         volumeNormalizationEnabled;
+    bluetoothLyricsEnabled =
+        prefs.getBool(_bluetoothLyricsEnabledSettingKey) ??
+            bluetoothLyricsEnabled;
     playbackSpeed = prefs.getDouble(_playbackSpeedSettingKey) ?? playbackSpeed;
     desktopLyricsEnabled =
         prefs.getBool(_desktopLyricsEnabledSettingKey) ?? desktopLyricsEnabled;
