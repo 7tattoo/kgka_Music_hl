@@ -1,22 +1,22 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import '../design_tokens.dart';
+import 'package:flutter/services.dart';
 
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
-import '../../models/music_models.dart';
 import '../pages/player_page.dart';
 import 'artwork.dart';
-import 'toast.dart';
 
-class MiniPlayer extends StatelessWidget {
+/// 全局通用的悬浮液态玻璃音乐唱片控制器（Floating Liquid Glass Disc Pod）。
+/// 在所有二级页面底部居中悬浮，与主页底栏唱片无缝位置与空间衔接。
+class MiniPlayer extends StatefulWidget {
   const MiniPlayer({
     super.key,
     required this.player,
     required this.auth,
-    this.onOpenPlayer, // 可选：AppShell 宿主提供则走 Stack 覆盖层；否则路由兜底
+    this.onOpenPlayer,
   });
 
   final PlayerController player;
@@ -24,193 +24,52 @@ class MiniPlayer extends StatelessWidget {
   final VoidCallback? onOpenPlayer;
 
   @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final isLandscape = size.width > size.height;
-    // 仅车机模式隐藏（由左侧播放面板替代）；普通横屏仍显示。
-    if (isLandscape && ThemeController.instance.carModeEnabled) {
-      return const SizedBox.shrink();
-    }
+  State<MiniPlayer> createState() => _MiniPlayerState();
+}
 
-    // MiniPlayer 响应 player 重建（进度/状态），高频更新会触发
-    // Windows AXTree 竞态崩溃，排除语义树以规避 Flutter Windows 引擎 bug
-    return ExcludeSemantics(
-      child: AnimatedBuilder(
-        animation: player,
-        builder: (context, _) {
-          final song = player.currentSong;
-          if (song == null) {
-            return const SizedBox.shrink();
-          }
+class _MiniPlayerState extends State<MiniPlayer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _rotationController;
 
-        final progress = player.duration.inMilliseconds == 0
-            ? 0.0
-            : (player.position.inMilliseconds / player.duration.inMilliseconds)
-                  .clamp(0.0, 1.0);
-        final colorScheme = Theme.of(context).colorScheme;
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? colorScheme.surfaceContainerHighest.withValues(alpha: .72)
-                      : colorScheme.surfaceContainerHighest.withValues(alpha: .64),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(
-                    color: colorScheme.outlineVariant.withValues(alpha: .38),
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: .08),
-                      blurRadius: 12,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: InkWell(
-                  onTap: onOpenPlayer ?? () => _openPlayerByRoute(context),
-                  child: SizedBox(
-                    height: 64,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Column(
-                            children: [
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    8,
-                                    7,
-                                    8,
-                                    8,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Hero(
-                                      tag: 'player_cover',
-                                      child: Artwork(
-                                        url: song.coverUrl,
-                                        size: 48,
-                                        borderRadius: 6,
-                                      ),
-                                    ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              song.title,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleSmall
-                                                  ?.copyWith(
-                                                    fontWeight: FontWeight.w900,
-                                                    fontSize: 16,
-                                                  ),
-                                            ),
-                                            Text(
-                                              song.artist,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: colorScheme
-                                                        .onSurfaceVariant,
-                                                    fontWeight: FontWeight.w600,
-                                                    fontSize: 14,
-                                                  ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: player.isPlaying ? '暂停' : '播放',
-                                        onPressed: player.isPreparing
-                                            ? null
-                                            : player.togglePlay,
-                                        icon: Icon(
-                                          player.isPlaying
-                                              ? Icons.pause_rounded
-                                              : Icons.play_arrow_rounded,
-                                          color: colorScheme.onSurface,
-                                          size: 30,
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: '播放队列',
-                                        onPressed: () => _showQueue(context),
-                                        icon: Icon(
-                                          Icons.queue_music_rounded,
-                                          color: colorScheme.onSurface,
-                                          size: 29,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              LinearProgressIndicator(
-                                value: progress,
-                                minHeight: 2,
-                                color: colorScheme.primary,
-                                backgroundColor: colorScheme.primary.withValues(
-                                  alpha: .12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (player.errorMessage case final message?)
-                          Positioned(
-                            left: 74,
-                            right: 88,
-                            bottom: 4,
-                            child: Text(
-                              message,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: colorScheme.error,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-        },
-      ),
+  @override
+  void initState() {
+    super.initState();
+    _rotationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 24),
     );
+    _syncRotation();
   }
 
-  /// 路由兜底：非 AppShell 宿主（搜索/歌单详情/云盘等页面）仍以路由方式打开
-  /// 播放页。使用自定义 PageRouteBuilder 与 ClipRect 裁剪播放页内放大溢出的模糊封面。
+  @override
+  void didUpdateWidget(covariant MiniPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncRotation();
+  }
+
+  @override
+  void dispose() {
+    _rotationController.dispose();
+    super.dispose();
+  }
+
+  void _syncRotation() {
+    if (widget.player.isPlaying) {
+      if (!_rotationController.isAnimating) {
+        _rotationController.repeat();
+      }
+    } else if (_rotationController.isAnimating) {
+      _rotationController.stop(canceled: false);
+    }
+  }
+
   void _openPlayerByRoute(BuildContext context) {
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         transitionDuration: const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 300),
         pageBuilder: (context, animation, secondaryAnimation) =>
-            PlayerPage(player: player, auth: auth),
+            PlayerPage(player: widget.player, auth: widget.auth),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           final tween = Tween<Offset>(
             begin: const Offset(1.0, 0.0),
@@ -225,237 +84,186 @@ class MiniPlayer extends StatelessWidget {
     );
   }
 
-  void _showQueue(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (sheetContext) {
-        final colorScheme = Theme.of(sheetContext).colorScheme;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      Text(
-                        '播放队列',
-                        style: Theme.of(sheetContext)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${player.queue.length} 首',
-                        style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: player.queue.length > 1
-                            ? () => _clearQueue(sheetContext)
-                            : null,
-                        child: Text(
-                          '清空',
-                          style: TextStyle(color: colorScheme.error),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Flexible(
-                  child: AnimatedBuilder(
-                    animation: player,
-                    builder: (context, _) {
-                      if (player.queue.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 32),
-                          child: Center(
-                            child: Text(
-                              '播放队列为空',
-                              style: Theme.of(sheetContext)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ),
-                        );
-                      }
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: player.queue.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 2),
-                        itemBuilder: (context, index) {
-                          final song = player.queue[index];
-                          final active =
-                              player.currentSong?.hash == song.hash;
-                          return _QueueTile(
-                            song: song,
-                            index: index + 1,
-                            active: active,
-                            isPlaying: active && player.isPlaying,
-                            onTap: () {
-                              Navigator.of(sheetContext).pop();
-                              player.playSong(song, queue: player.queue);
-                            },
-                            onDelete: player.queue.length > 1
-                                ? () => _removeFromQueue(sheetContext, index)
-                                : null,
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// 从队列中移除指定项（保留当前播放歌曲）。
-  void _removeFromQueue(BuildContext sheetContext, int index) {
-    final newQueue = List<Song>.of(player.queue);
-    if (index < 0 || index >= newQueue.length) return;
-    final removed = newQueue.removeAt(index);
-    final current = player.currentSong;
-    if (current == null) return;
-
-    if (removed.hash == current.hash) {
-      // 删除的是当前播放歌曲：切到同位置的新歌
-      final nextIndex = index.clamp(0, newQueue.length - 1);
-      if (newQueue.isEmpty) {
-        Navigator.of(sheetContext).pop();
-        player.playSong(current, queue: [current]);
-        return;
-      }
-      Navigator.of(sheetContext).pop();
-      player.playSong(newQueue[nextIndex], queue: newQueue);
-    } else {
-      // 非当前歌曲：仅更新队列，不打断播放
-      player.playSong(current, queue: newQueue);
-    }
-  }
-
-  /// 清空队列（仅保留当前播放歌曲）。
-  void _clearQueue(BuildContext sheetContext) {
-    final current = player.currentSong;
-    if (current == null) return;
-    Navigator.of(sheetContext).pop();
-    player.playSong(current, queue: [current]);
-    Toast.success('已清空播放队列');
-  }
-}
-
-class _QueueTile extends StatelessWidget {
-  const _QueueTile({
-    required this.song,
-    required this.index,
-    required this.active,
-    required this.isPlaying,
-    required this.onTap,
-    this.onDelete,
-  });
-
-  final Song song;
-  final int index;
-  final bool active;
-  final bool isPlaying;
-  final VoidCallback onTap;
-  final VoidCallback? onDelete;
-
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final isLandscape = size.width > size.height;
+    // 仅车机模式隐藏（由左侧播放面板替代）；普通横屏仍显示。
+    if (isLandscape && ThemeController.instance.carModeEnabled) {
+      return const SizedBox.shrink();
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final colorScheme = Theme.of(context).colorScheme;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: active
-              ? colorScheme.primary.withValues(alpha: .09)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 24,
-              child: Text(
-                '$index',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: active
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: widget.player,
+        builder: (context, _) {
+          _syncRotation();
+          final song = widget.player.currentSong;
+          if (song == null) {
+            return const SizedBox.shrink();
+          }
+
+          final durationMs = widget.player.duration.inMilliseconds;
+          final positionMs = widget.player.position.inMilliseconds;
+          final progress = (durationMs > 0 ? (positionMs / durationMs) : 0.0)
+              .clamp(0.0, 1.0);
+
+          return Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                // iOS 26 超柔焦散深度悬浮阴影
+                boxShadow: [
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: .50)
+                        : const Color(0x18000000),
+                    blurRadius: 28,
+                    spreadRadius: -2,
+                    offset: const Offset(0, 10),
+                  ),
+                  BoxShadow(
+                    color: isDark
+                        ? Colors.black.withValues(alpha: .25)
+                        : const Color(0x0C000000),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                  if (!isDark)
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: .95),
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                      offset: const Offset(0, -1),
                     ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Artwork(url: song.coverUrl, size: 40, borderRadius: 8),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    song.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: active ? colorScheme.primary : null,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    song.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: active
-                              ? colorScheme.primary.withValues(alpha: .72)
-                              : colorScheme.onSurfaceVariant,
-                        ),
-                  ),
                 ],
               ),
+              child: ClipOval(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      // iOS 26 极透微光物理透镜折射渐变
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: isDark
+                            ? [
+                                const Color(0xFF1E2433).withValues(alpha: .55),
+                                const Color(0xFF10141D).withValues(alpha: .38),
+                              ]
+                            : [
+                                Colors.white.withValues(alpha: .55),
+                                Colors.white.withValues(alpha: .28),
+                              ],
+                      ),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: .22)
+                            : Colors.white.withValues(alpha: .95),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.onOpenPlayer ?? () => _openPlayerByRoute(context),
+                      onLongPress: () {
+                        HapticFeedback.lightImpact();
+                        widget.player.togglePlay();
+                      },
+                      child: Center(
+                        child: SizedBox.square(
+                          dimension: 46,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // 1. 外圈环形播放进度条（仅显示已播放进度弧线）
+                              SizedBox.square(
+                                dimension: 46,
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 2.2,
+                                  strokeCap: StrokeCap.round,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    colorScheme.primary,
+                                  ),
+                                  backgroundColor: Colors.transparent,
+                                ),
+                              ),
+                              // 2. 内部黑胶唱片/专辑封面
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: .20),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipOval(
+                                  child: RotationTransition(
+                                    turns: _rotationController,
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        Artwork(
+                                          url: song.coverUrl,
+                                          size: 38,
+                                          borderRadius: 38,
+                                        ),
+                                        // 唱片同心圆边缘纹理
+                                        DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white.withValues(alpha: .25),
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          child: const SizedBox.expand(),
+                                        ),
+                                        // 中心轴孔微光
+                                        Center(
+                                          child: Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: colorScheme.surface,
+                                              border: Border.all(
+                                                color: Colors.black.withValues(alpha: .35),
+                                                width: 0.8,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            if (active)
-              Icon(
-                isPlaying ? Icons.equalizer_rounded : Icons.pause_rounded,
-                size: 18,
-                color: colorScheme.primary,
-              ),
-            if (onDelete != null) ...[
-              const SizedBox(width: 4),
-              IconButton(
-                icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
-                onPressed: onDelete,
-                visualDensity: VisualDensity.compact,
-                tooltip: '从队列移除',
-                color: colorScheme.onSurfaceVariant,
-                constraints: const BoxConstraints(),
-                padding: EdgeInsets.zero,
-              ),
-            ],
-          ],
-        ),
+          );
+        },
       ),
     );
   }

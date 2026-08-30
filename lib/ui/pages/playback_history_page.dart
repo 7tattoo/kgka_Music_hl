@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../design_tokens.dart';
 import '../widgets/status_bar_overlay.dart';
 
@@ -102,8 +103,10 @@ class _PlaybackHistoryPageState extends State<PlaybackHistoryPage> {
 
     return StatusBarOverlay(
       brightness: Theme.of(context).brightness,
-      child: Scaffold(
-        body: AdaptiveContentPadding(
+      child: LiquidGlassBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: AdaptiveContentPadding(
         child: Stack(
           children: [
             FutureBuilder<List<Song>>(
@@ -174,6 +177,7 @@ class _PlaybackHistoryPageState extends State<PlaybackHistoryPage> {
         ),
       ),
       ),
+      ),
     );
   }
 
@@ -184,6 +188,8 @@ class _PlaybackHistoryPageState extends State<PlaybackHistoryPage> {
   ) {
     return SliverAppBar(
       pinned: true,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       title: const Text(
         '播放历史',
         style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),

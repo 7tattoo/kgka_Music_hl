@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../widgets/app_section.dart';
 import '../widgets/app_feedback.dart';
 import '../design_tokens.dart';
@@ -1010,29 +1011,28 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
-    return Scaffold(
-      extendBody: true,
-      body: AdaptiveContentPadding(
-        child: Stack(
-        children: [
-          // Windows 平台滚动时 sliver item 回收重建会产生大量语义节点更新，
-          // 触发 Flutter Windows 引擎 AXTree 更新 bug（console 提示
-          // "Failed to update ui::AXTree"）。在 Windows 上排除语义树消除提示，
-          // 移动端保留无障碍功能。
-          ExcludeSemantics(
-            excluding: !Platform.isWindows,
-            child: CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              SliverAppBar(
-                pinned: true,
-                stretch: !_isSearching,
-                expandedHeight: _isSearching ? 0 : 198,
-                surfaceTintColor: Colors.transparent,
-                // 头部渐变顶部为半透明 primary，收缩后若 toolbar 无不透明背景，
-                // 列表内容会透过与标题/操作按钮重叠。这里用 scaffoldBackgroundColor
-                // 作为不透明底色（与头部渐变底部一致，过渡自然），展开态被 _HeroHeader 覆盖。
-                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+    return LiquidGlassBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBody: true,
+        body: AdaptiveContentPadding(
+          child: Stack(
+          children: [
+            // Windows 平台滚动时 sliver item 回收重建会产生大量语义节点更新，
+            // 触发 Flutter Windows 引擎 AXTree 更新 bug（console 提示
+            // "Failed to update ui::AXTree"）。在 Windows 上排除语义树消除提示，
+            // 移动端保留无障碍功能。
+            ExcludeSemantics(
+              excluding: !Platform.isWindows,
+              child: CustomScrollView(
+              controller: _scrollController,
+              slivers: [
+                SliverAppBar(
+                  pinned: true,
+                  stretch: !_isSearching,
+                  expandedHeight: _isSearching ? 0 : 198,
+                  surfaceTintColor: Colors.transparent,
+                  backgroundColor: Colors.transparent,
                 title: _isSearching
                     ? TextField(
                         controller: _searchController,
@@ -1253,6 +1253,7 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
         ],
       ),
     ),
+    ),
   );
   }
 }
@@ -1388,25 +1389,11 @@ class _HeroHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorScheme.primary.withValues(alpha: isDark ? .28 : .18),
-            const Color(0xFFDCEEFF).withValues(alpha: isDark ? .08 : .92),
-            Theme.of(context).scaffoldBackgroundColor,
-          ],
-          stops: const [0, .58, 1],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
           child: LayoutBuilder(
             builder: (context, constraints) {
               final compact = constraints.maxWidth < 380;
@@ -1466,8 +1453,7 @@ class _HeroHeader extends StatelessWidget {
             },
           ),
         ),
-      ),
-    );
+      );
   }
 }
 
@@ -2015,62 +2001,57 @@ class _SelectionBar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Material(
-        elevation: 6,
-        shadowColor: Colors.black.withValues(alpha: .3),
-        color: colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 12, 4),
-          child: Row(
-            children: [
-              TextButton(
-                onPressed: onToggleAll,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(allSelected ? '取消全选' : '全选'),
+      child: LiquidGlassCard(
+        borderRadius: AppRadius.xl,
+        padding: const EdgeInsets.fromLTRB(8, 4, 12, 4),
+        enableTouchFlex: false,
+        child: Row(
+          children: [
+            TextButton(
+              onPressed: onToggleAll,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              TextButton(
-                onPressed: onInvert,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text('反选'),
+              child: Text(allSelected ? '取消全选' : '全选'),
+            ),
+            TextButton(
+              onPressed: onInvert,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              Expanded(
-                child: Text(
-                  '已选择 $selectedCount 首',
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
+              child: const Text('反选'),
+            ),
+            Expanded(
+              child: Text(
+                '已选择 $selectedCount 首',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
-              FilledButton.icon(
-                onPressed: downloading ? null : onDownload,
-                icon: downloading
-                    ? const SizedBox.square(
-                        dimension: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.download_rounded, size: 18),
-                label: Text(
-                  downloading ? '加入中…' : '下载($selectedCount)',
-                ),
-                style: FilledButton.styleFrom(
-                  shape: const StadiumBorder(),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                ),
+            ),
+            FilledButton.icon(
+              onPressed: downloading ? null : onDownload,
+              icon: downloading
+                  ? const SizedBox.square(
+                      dimension: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.download_rounded, size: 18),
+              label: Text(
+                downloading ? '加入中…' : '下载($selectedCount)',
               ),
-            ],
-          ),
+              style: FilledButton.styleFrom(
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+            ),
+          ],
         ),
       ),
     );

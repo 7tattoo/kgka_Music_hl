@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../design_tokens.dart';
 
 import '../../controllers/auth_controller.dart';
@@ -111,36 +112,8 @@ class _LibraryPageState extends State<LibraryPage>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Stack(
       children: [
-        // 顶部渐变背景（仅顶部区域，淡淡过渡到透明）
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 280,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: isDark
-                    ? const [
-                        Color(0xFF10233A),
-                        Color(0xFF0B1828),
-                        Color(0x0006070A),
-                      ]
-                    : const [
-                        Color(0xFFEAF3FF),
-                        Color(0xFFF2F7FD),
-                        Color(0x00FFFFFF),
-                      ],
-                stops: const [0, .6, 1],
-              ),
-            ),
-          ),
-        ),
         // 内容层
         SafeArea(
           bottom: false,
@@ -185,40 +158,36 @@ class _LibraryPageState extends State<LibraryPage>
                       ),
                     ),
                   ),
-                  // Account info
+                  // 用户信息与功能快捷入口一体化卡片
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                      child: _AccountRow(auth: widget.auth),
-                    ),
-                  ),
-                  // Quick action cards (horizontal scrollable)
-                  SliverToBoxAdapter(
-                    child: _QuickActionRow(
-                      auth: widget.auth,
-                      downloads: widget.downloads,
-                      player: widget.player,
-                      localMusic: widget.localMusic,
-                      api: widget.api,
-                      onOpenLiked: widget.auth.likedPlaylist == null
-                          ? null
-                          : () => _openPlaylist(widget.auth.likedPlaylist!),
-                      onOpenDownloads: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => DownloadedSongsPage(
-                            api: widget.api,
-                            auth: widget.auth,
-                            player: widget.player,
-                            downloads: widget.downloads,
+                      padding: const EdgeInsets.fromLTRB(18, 12, 18, 0),
+                      child: _UserHubCard(
+                        auth: widget.auth,
+                        downloads: widget.downloads,
+                        player: widget.player,
+                        localMusic: widget.localMusic,
+                        api: widget.api,
+                        onOpenLiked: widget.auth.likedPlaylist == null
+                            ? null
+                            : () => _openPlaylist(widget.auth.likedPlaylist!),
+                        onOpenDownloads: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DownloadedSongsPage(
+                              api: widget.api,
+                              auth: widget.auth,
+                              player: widget.player,
+                              downloads: widget.downloads,
+                            ),
                           ),
                         ),
-                      ),
-                      onOpenCloudDrive: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => CloudDrivePage(
-                            api: widget.api,
-                            auth: widget.auth,
-                            player: widget.player,
+                        onOpenCloudDrive: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => CloudDrivePage(
+                              api: widget.api,
+                              auth: widget.auth,
+                              player: widget.player,
+                            ),
                           ),
                         ),
                       ),
@@ -255,63 +224,10 @@ class _LibraryPageState extends State<LibraryPage>
   }
 }
 
-// --- Account row (no card background) ---
+// --- 用户信息与快捷功能一体化卡片 (Unified User Hub Card) ---
 
-class _AccountRow extends StatelessWidget {
-  const _AccountRow({required this.auth});
-
-  final AuthController auth;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final profile = auth.profile;
-
-    return Row(
-      children: [
-        Container(
-          width: 46,
-          height: 46,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest,
-            shape: BoxShape.circle,
-          ),
-          child: profile?.avatarUrl == null
-              ? Icon(Icons.person_rounded, color: colorScheme.primary)
-              : Image.network(profile!.avatarUrl!, fit: BoxFit.cover),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                profile?.nickname ?? 'KA Music 用户',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              Text(
-                '已登录',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// --- Quick action row (horizontal scrollable cards) ---
-
-class _QuickActionRow extends StatelessWidget {
-  const _QuickActionRow({
+class _UserHubCard extends StatelessWidget {
+  const _UserHubCard({
     required this.auth,
     required this.downloads,
     required this.player,
@@ -333,147 +249,286 @@ class _QuickActionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 16, 0, 0),
-      child: SizedBox(
-        height: 120,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.only(right: 18),
-          children: [
-            _QuickActionCard(
-              icon: Icons.favorite_rounded,
-              iconColor: const Color.fromARGB(176, 255, 99, 151),
-              subtitle: '${auth.likedCount} 首歌曲',
-              title: '我喜欢',
-              onTap: onOpenLiked,
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final profile = auth.profile;
+
+    return LiquidGlassCard(
+      borderRadius: AppRadius.xxl,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      enableTouchFlex: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // 1. 用户信息头部（无生硬横线分割，自然通透）
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: .22)
+                          : Colors.white.withValues(alpha: .95),
+                      width: 1.8,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: isDark ? .30 : .08),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: profile?.avatarUrl == null
+                      ? Icon(Icons.person_rounded, color: colorScheme.primary, size: 28)
+                      : Image.network(profile!.avatarUrl!, fit: BoxFit.cover),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        profile?.nickname ?? 'KA Music 用户',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: auth.isLoggedIn
+                                  ? const Color(0xFF4CAF50)
+                                  : colorScheme.onSurfaceVariant.withValues(alpha: .5),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            auth.isLoggedIn ? '已登录' : '未登录',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            _QuickActionCard(
-              icon: Icons.cloud_rounded,
-              iconColor: const Color.fromARGB(200, 88, 156, 245),
-              subtitle: '云盘音乐',
-              title: '云盘',
-              onTap: onOpenCloudDrive,
-            ),
-            const SizedBox(width: 10),
-            AnimatedBuilder(
-              animation: downloads,
-              builder: (context, _) {
-                return _QuickActionCard(
-                  icon: Icons.download_rounded,
-                  iconColor: Theme.of(context).colorScheme.primary,
-                  subtitle: '${downloads.downloadedSongs.length} 首歌曲',
-                  title: '已下载',
-                  onTap: onOpenDownloads,
-                );
-              },
-            ),
-            const SizedBox(width: 10),
-            AnimatedBuilder(
-              animation: localMusic,
-              builder: (context, _) {
-                return _QuickActionCard(
-                  icon: Icons.computer_rounded,
-                  iconColor: const Color.fromARGB(200, 76, 175, 80),
-                  subtitle: '${localMusic.songs.length} 首歌曲',
-                  title: '本地',
+          ),
+          const SizedBox(height: 16),
+          // 2. 精致拟态功能快捷卡片
+          SizedBox(
+            height: 118,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              children: [
+                _HubActionItem(
+                  icon: Icons.favorite_rounded,
+                  gradientColors: const [Color(0xFFFF7597), Color(0xFFFF416C)],
+                  subtitle: '${auth.likedCount} 首歌曲',
+                  title: '我喜欢',
+                  onTap: onOpenLiked,
+                ),
+                const SizedBox(width: 10),
+                _HubActionItem(
+                  icon: Icons.cloud_rounded,
+                  gradientColors: const [Color(0xFF68B0FB), Color(0xFF3378FF)],
+                  subtitle: '云盘音乐',
+                  title: '云盘',
+                  onTap: onOpenCloudDrive,
+                ),
+                const SizedBox(width: 10),
+                AnimatedBuilder(
+                  animation: downloads,
+                  builder: (context, _) {
+                    return _HubActionItem(
+                      icon: Icons.download_rounded,
+                      gradientColors: [
+                        colorScheme.primary.withValues(alpha: .85),
+                        colorScheme.primary,
+                      ],
+                      subtitle: '${downloads.downloadedSongs.length} 首歌曲',
+                      title: '已下载',
+                      onTap: onOpenDownloads,
+                    );
+                  },
+                ),
+                const SizedBox(width: 10),
+                AnimatedBuilder(
+                  animation: localMusic,
+                  builder: (context, _) {
+                    return _HubActionItem(
+                      icon: Icons.folder_special_rounded,
+                      gradientColors: const [Color(0xFF66BB6A), Color(0xFF2E7D32)],
+                      subtitle: '${localMusic.songs.length} 首歌曲',
+                      title: '本地音乐',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => LocalSongsPage(
+                            player: player,
+                            localMusic: localMusic,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 10),
+                _HubActionItem(
+                  icon: Icons.history_rounded,
+                  gradientColors: const [Color(0xFFFFA726), Color(0xFFF57C00)],
+                  subtitle: '最近播放',
+                  title: '播放历史',
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => LocalSongsPage(
+                      builder: (_) => PlaybackHistoryPage(
+                        api: api,
+                        auth: auth,
                         player: player,
-                        localMusic: localMusic,
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-            const SizedBox(width: 10),
-            _QuickActionCard(
-              icon: Icons.history_rounded,
-              iconColor: const Color.fromARGB(200, 255, 167, 38),
-              subtitle: '最近播放',
-              title: '历史',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => PlaybackHistoryPage(
-                    api: api,
-                    auth: auth,
-                    player: player,
-                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _QuickActionCard extends StatelessWidget {
-  const _QuickActionCard({
+class _HubActionItem extends StatefulWidget {
+  const _HubActionItem({
     required this.icon,
-    required this.iconColor,
+    required this.gradientColors,
     required this.subtitle,
     required this.title,
     required this.onTap,
   });
 
   final IconData icon;
-  final Color iconColor;
+  final List<Color> gradientColors;
   final String subtitle;
   final String title;
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+  State<_HubActionItem> createState() => _HubActionItemState();
+}
 
-    return Container(
-      width: 93,
-      margin: const EdgeInsets.only(right: 0),
-      child: Material(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: iconColor,
-                    borderRadius: BorderRadius.circular(11),
+class _HubActionItemState extends State<_HubActionItem> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final primaryColor = widget.gradientColors.last;
+    final cardBgColor = isDark
+        ? Colors.white.withValues(alpha: .06)
+        : Colors.white.withValues(alpha: .85);
+    final cardBorderColor = isDark
+        ? Colors.white.withValues(alpha: .12)
+        : Colors.white.withValues(alpha: .92);
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _isPressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        child: Container(
+          width: 104,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            color: cardBgColor,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: cardBorderColor, width: 1.1),
+            boxShadow: [
+              BoxShadow(
+                color: isDark
+                    ? Colors.black.withValues(alpha: .20)
+                    : const Color(0x0C000000),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: widget.gradientColors,
                   ),
-                  child: Icon(icon, color: Colors.white, size: 20),
+                  borderRadius: BorderRadius.circular(13),
+                  boxShadow: [
+                    BoxShadow(
+                      color: primaryColor.withValues(alpha: isDark ? .40 : .32),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                child: Icon(widget.icon, color: Colors.white, size: 22),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                widget.subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                widget.title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                  letterSpacing: -0.1,
                 ),
-              ],
-            ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
       ),
@@ -498,16 +553,12 @@ class _PlaylistTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 0),
-      child: Container(
+      child: LiquidGlassCard(
+        borderRadius: AppRadius.md,
         padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          color: colorScheme.surfaceContainer,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
+        enableTouchFlex: false,
         child: AnimatedBuilder(
           animation: controller,
           builder: (context, _) {
@@ -1058,36 +1109,28 @@ class _PlaylistGroup extends StatelessWidget {
         ),
         itemCount: playlists.length,
         itemBuilder: (context, i) {
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainer,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              child: _PlaylistRow(
-                playlist: playlists[i],
-                selected: multiSelectMode && selectedIndices.contains(i),
-                multiSelectMode: multiSelectMode,
-                onTap: multiSelectMode
-                    ? () => onTapInMultiSelect?.call(i)
-                    : () => onOpen(playlists[i]),
-                onLongPress: () => onLongPress?.call(i),
-              ),
+          return LiquidGlassCard(
+            borderRadius: AppRadius.lg,
+            padding: EdgeInsets.zero,
+            child: _PlaylistRow(
+              playlist: playlists[i],
+              selected: multiSelectMode && selectedIndices.contains(i),
+              multiSelectMode: multiSelectMode,
+              onTap: multiSelectMode
+                  ? () => onTapInMultiSelect?.call(i)
+                  : () => onOpen(playlists[i]),
+              onLongPress: () => onLongPress?.call(i),
             ),
           );
         },
       );
     }
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Column(
+    return LiquidGlassCard(
+      borderRadius: AppRadius.lg,
+      padding: EdgeInsets.zero,
+      enableTouchFlex: false,
+      child: Column(
           children: [
             for (var i = 0; i < playlists.length; i++) ...[
               _PlaylistRow(
@@ -1108,10 +1151,9 @@ class _PlaylistGroup extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
+      );
+    }
   }
-}
 
 // --- Playlist row ---
 

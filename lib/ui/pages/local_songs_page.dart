@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../design_tokens.dart';
 import '../adaptive_layout.dart';
 import '../../controllers/player_controller.dart';
@@ -208,9 +209,13 @@ class _LocalSongsPageState extends State<LocalSongsPage> {
 
     return StatusBarOverlay(
       brightness: Theme.of(context).brightness,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('本地音乐'),
+      child: LiquidGlassBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            title: const Text('本地音乐'),
         actions: [
           AnimatedBuilder(
             animation: widget.localMusic,
@@ -292,13 +297,11 @@ class _LocalSongsPageState extends State<LocalSongsPage> {
                 // 歌曲数显示
                 if (allSongs.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    child: LiquidGlassCard(
+                      borderRadius: AppRadius.md,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainer,
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                      ),
+                      enableTouchFlex: false,
                       child: Row(
                         children: [
                           Icon(Icons.music_note_rounded, color: colorScheme.primary, size: 20),
@@ -329,21 +332,23 @@ class _LocalSongsPageState extends State<LocalSongsPage> {
                 if (allSongs.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: '检索本地音乐...',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        suffixIcon: _searchQuery.isNotEmpty
-                            ? IconButton(
-                                onPressed: () => _searchController.clear(),
-                                icon: const Icon(Icons.clear_rounded),
-                              )
-                            : null,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.md),
+                    child: LiquidGlassCard(
+                      borderRadius: AppRadius.md,
+                      padding: EdgeInsets.zero,
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: '检索本地音乐...',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  onPressed: () => _searchController.clear(),
+                                  icon: const Icon(Icons.clear_rounded),
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       ),
                     ),
                   ),
@@ -423,6 +428,7 @@ class _LocalSongsPageState extends State<LocalSongsPage> {
             );
           },
         ),
+      ),
       ),
       ),
     );

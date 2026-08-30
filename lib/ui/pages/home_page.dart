@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_section.dart';
 import '../design_tokens.dart';
@@ -658,7 +659,6 @@ class _RecommendHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final size = MediaQuery.sizeOf(context);
     final isLandscape = size.width > size.height;
     // 车机模式专属样式仅在开启时生效，普通横屏不受影响。
@@ -670,21 +670,10 @@ class _RecommendHeader extends StatelessWidget {
         size.height >= 600 &&
         (size.width / size.height) > 2.0;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: isDark
-              ? const [Color(0xFF10233A), Color(0xFF06070A)]
-              : const [Color(0xFFDCEEFF), Color(0xFFF7FBFF), Colors.white],
-          stops: isDark ? const [0, 1] : const [0, .68, 1],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-              padding: EdgeInsets.fromLTRB(18, isCarMode ? 4 : 10, 0, 12),
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(18, isCarMode ? 4 : 10, 0, 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -765,8 +754,7 @@ class _RecommendHeader extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }
 
@@ -801,6 +789,7 @@ class _TopTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final tabs = ['推荐', '电台'];
     return AnimatedBuilder(
       animation: auth,
@@ -814,37 +803,25 @@ class _TopTabs extends StatelessWidget {
                   children: [
                     for (final entry in tabs.indexed)
                       Padding(
-                        padding: const EdgeInsets.only(right: 30),
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
+                        padding: const EdgeInsets.only(right: 10),
+                        child: LiquidGlassCapsule(
+                          isActive: entry.$1 == index,
                           onTap: () => onChanged(entry.$1),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                entry.$2,
-                                style: Theme.of(context).textTheme.titleLarge
-                                    ?.copyWith(
-                                      fontSize: 18,
-                                      color: entry.$1 == index
-                                          ? colorScheme.onSurface
-                                          : colorScheme.onSurfaceVariant,
-                                      fontWeight: entry.$1 == index
-                                          ? FontWeight.w900
-                                          : FontWeight.w700,
-                                    ),
-                              ),
-                              const SizedBox(height: 6),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                width: entry.$1 == index ? 28 : 0,
-                                height: 3,
-                                decoration: BoxDecoration(
-                                  color: colorScheme.primary,
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                              ),
-                            ],
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          child: Text(
+                            entry.$2,
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: entry.$1 == index
+                                  ? (isDark ? Colors.white : colorScheme.primary)
+                                  : colorScheme.onSurfaceVariant,
+                              fontWeight: entry.$1 == index
+                                  ? FontWeight.w800
+                                  : FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
@@ -852,10 +829,10 @@ class _TopTabs extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
-              tooltip: '设置',
-              onPressed: onSettingsTap,
-              icon: const Icon(Icons.settings_rounded),
+            LiquidGlassCapsule(
+              padding: const EdgeInsets.all(8),
+              onTap: onSettingsTap,
+              child: const Icon(Icons.settings_rounded, size: 20),
             ),
           ],
         );
@@ -886,38 +863,31 @@ class _SmartSearch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        Expanded(
-          child: GestureDetector(
-            onTap: () => _openSearch(context),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white.withValues(alpha: .08)
-                    : Colors.white.withValues(alpha: .92),
-                borderRadius: BorderRadius.circular(9),
-                border: Border.all(color: Colors.white.withValues(alpha: .56)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                child: Text(
-                  '搜索歌曲，歌手',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+    return LiquidGlassCard(
+      borderRadius: AppRadius.lg,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      onTap: () => _openSearch(context),
+      child: Row(
+        children: [
+          Icon(
+            Icons.search_rounded,
+            size: 20,
+            color: colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '搜索歌曲，歌手',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                   ),
-                ),
-              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1031,17 +1001,13 @@ class _FeatureCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+    return LiquidGlassCard(
+      borderRadius: AppRadius.md,
+      padding: EdgeInsets.zero,
       onTap: loading ? null : onTap,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: gradient),
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          child: Stack(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Stack(
             children: [
               if (imageUrl != null)
                 Positioned.fill(
@@ -1114,10 +1080,9 @@ class _FeatureCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
+    }
   }
-}
 
 class _SongSection extends StatefulWidget {
   const _SongSection({
@@ -1507,33 +1472,39 @@ class _TopSongCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
+    return LiquidGlassCard(
+      borderRadius: AppRadius.md,
+      padding: const EdgeInsets.all(6),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            child: Artwork(url: song.coverUrl, size: 110),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            song.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-          ),
-          Text(
-            song.artist,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              color: colorScheme.onSurfaceVariant,
+      child: SizedBox(
+        width: 110,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: Artwork(url: song.coverUrl, size: 110),
             ),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              song.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              song.artist,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1590,17 +1561,19 @@ class _TopAlbumCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return InkWell(
+    return LiquidGlassCard(
+      borderRadius: AppRadius.md,
+      padding: const EdgeInsets.all(6),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.md),
       child: SizedBox(
-        width: 120,
+        width: 110,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              child: Artwork(url: album.coverUrl, size: 120),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: Artwork(url: album.coverUrl, size: 110),
             ),
             const SizedBox(height: 6),
             Text(
@@ -1609,6 +1582,7 @@ class _TopAlbumCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
             ),
+            const SizedBox(height: 2),
             Text(
               album.singerName ?? '',
               maxLines: 1,
@@ -1804,27 +1778,29 @@ class _PlaylistCard extends StatelessWidget {
       builder: (context, constraints) {
         final size = constraints.maxWidth.isInfinite ? 128.0 : constraints.maxWidth;
 
-        return InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+        return LiquidGlassCard(
+          borderRadius: AppRadius.lg,
+          padding: const EdgeInsets.all(8),
           onTap: onTap,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Artwork(url: playlist.coverUrl, size: size, borderRadius: 10),
-              const SizedBox(height: 9),
+              const SizedBox(height: 8),
               SizedBox(
-                height: 42,
+                height: 40,
                 child: Text(
                   playlist.title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                     height: 1.16,
                   ),
                 ),
               ),
+              const SizedBox(height: 2),
               Text(
                 playlist.subtitle ?? _playCount(playlist.playCount),
                 maxLines: 1,
@@ -2129,72 +2105,67 @@ class _RadioHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return AspectRatio(
       aspectRatio: 2.08,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: LiquidGlassCard(
+        borderRadius: AppRadius.lg,
+        padding: EdgeInsets.zero,
         onTap: loading ? null : onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainer,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (station.bannerUrl ?? station.artworkUrl case final url?)
-                  Image.network(
-                    url,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                  ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: .08),
-                        Colors.black.withValues(alpha: .72),
-                      ],
-                    ),
-                  ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (station.bannerUrl ?? station.artworkUrl case final url?)
+                Image.network(
+                  url,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Spacer(),
-                      Text(
-                        station.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        station.subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.white.withValues(alpha: .82),
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: .08),
+                      Colors.black.withValues(alpha: .72),
                     ],
                   ),
                 ),
-                Positioned(
-                  right: 14,
-                  bottom: 14,
-                  child: _RadioPlayBadge(loading: loading),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Spacer(),
+                    Text(
+                      station.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      station.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: .82),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Positioned(
+                right: 14,
+                bottom: 14,
+                child: _RadioPlayBadge(loading: loading),
+              ),
+            ],
           ),
         ),
       ),
@@ -2291,17 +2262,19 @@ class _RadioStationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 128,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        onTap: loading ? null : onTap,
+    return LiquidGlassCard(
+      borderRadius: AppRadius.lg,
+      padding: const EdgeInsets.all(8),
+      onTap: loading ? null : onTap,
+      child: SizedBox(
+        width: 120,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Stack(
               children: [
-                Artwork(url: station.artworkUrl, size: 128, borderRadius: 10),
+                Artwork(url: station.artworkUrl, size: 120, borderRadius: 10),
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -2320,23 +2293,23 @@ class _RadioStationCard extends StatelessWidget {
                   ),
                 ),
                 Positioned(
-                  right: 8,
-                  bottom: 8,
+                  right: 6,
+                  bottom: 6,
                   child: _RadioPlayBadge(loading: loading, compact: true),
                 ),
               ],
             ),
-            const SizedBox(height: 9),
+            const SizedBox(height: 8),
             Text(
               station.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 height: 1.16,
               ),
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 2),
             Text(
               station.subtitle,
               maxLines: 1,

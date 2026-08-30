@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../widgets/app_feedback.dart';
 import '../design_tokens.dart';
 
@@ -155,31 +156,30 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
-    return Scaffold(
-      extendBody: true,
-      body: AdaptiveContentPadding(
-        child: Stack(
-          children: [
-            CustomScrollView(
-              controller: _scrollController,
-              slivers: [
-                SliverAppBar(
-                  pinned: true,
-                  expandedHeight: 198,
-                  surfaceTintColor: Colors.transparent,
-                  // 头部渐变顶部为半透明 primary，收缩后若 toolbar 无不透明背景，
-                  // 列表内容会透过与标题重叠。这里用 scaffoldBackgroundColor 作为
-                  // 不透明底色（与头部渐变底部一致，过渡自然），展开态被 _CloudHeader 覆盖。
-                  backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                  title: const Text(
-                    '云盘',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+    return LiquidGlassBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        extendBody: true,
+        body: AdaptiveContentPadding(
+          child: Stack(
+            children: [
+              CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverAppBar(
+                    pinned: true,
+                    expandedHeight: 198,
+                    surfaceTintColor: Colors.transparent,
+                    backgroundColor: Colors.transparent,
+                    title: const Text(
+                      '云盘',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                    flexibleSpace: FlexibleSpaceBar(
+                      stretchModes: const [StretchMode.zoomBackground],
+                      background: _CloudHeader(info: _info),
+                    ),
                   ),
-                  flexibleSpace: FlexibleSpaceBar(
-                    stretchModes: const [StretchMode.zoomBackground],
-                    background: _CloudHeader(info: _info),
-                  ),
-                ),
                 if (_isInitialLoading)
                   const _CloudSkeleton()
                 else if (_errorMessage case final message?)
@@ -251,6 +251,7 @@ class _CloudDrivePageState extends State<CloudDrivePage> {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -263,38 +264,20 @@ class _CloudHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            colorScheme.primary.withValues(alpha: isDark ? .28 : .18),
-            const Color(0xFFDCEEFF).withValues(alpha: isDark ? .08 : .92),
-            Theme.of(context).scaffoldBackgroundColor,
-          ],
-          stops: const [0, .58, 1],
-        ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-          child: Column(
+    return SafeArea(
+      bottom: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 84,
-                    height: 84,
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: .15),
-                      borderRadius: BorderRadius.circular(AppRadius.xl),
-                    ),
+                  LiquidGlassCard(
+                    borderRadius: AppRadius.xl,
+                    padding: const EdgeInsets.all(18),
                     child: Icon(
                       Icons.cloud_rounded,
                       size: 44,
@@ -337,8 +320,7 @@ class _CloudHeader extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }
 

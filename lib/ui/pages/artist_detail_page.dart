@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../widgets/app_section.dart';
 import '../design_tokens.dart';
 
@@ -209,15 +210,18 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     // MiniPlayer 高度约 64，距底部 16，合计预留空间防止遮挡最后一首歌
     final miniPlayerSpace = bottomInset + 64 + 16;
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
+    return LiquidGlassBackground(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: const SizedBox.shrink(),
-      ),
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const SizedBox.shrink(),
+        ),
       body: AdaptiveContentPadding(
         child: Stack(
           fit: StackFit.expand,
@@ -318,6 +322,7 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

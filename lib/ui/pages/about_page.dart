@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../design_tokens.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -62,17 +63,18 @@ class _AboutPageState extends State<AboutPage> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      body: AdaptiveContentPadding(
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              pinned: true,
-              title: const Text('关于'),
-              surfaceTintColor: Colors.transparent,
-              backgroundColor: colorScheme.surface,
-            ),
+    return LiquidGlassBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: AdaptiveContentPadding(
+          child: CustomScrollView(
+            slivers: [
+              const SliverAppBar(
+                pinned: true,
+                title: Text('关于'),
+                surfaceTintColor: Colors.transparent,
+                backgroundColor: Colors.transparent,
+              ),
             SliverToBoxAdapter(
               child: Column(
                 children: [
@@ -199,6 +201,7 @@ class _AboutPageState extends State<AboutPage> {
           ],
         ),
       ),
+      ),
     );
   }
 }
@@ -302,16 +305,11 @@ class _InfoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        child: Column(children: children),
-      ),
+    return LiquidGlassCard(
+      borderRadius: AppRadius.lg,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      enableTouchFlex: false,
+      child: Column(children: children),
     );
   }
 }
@@ -374,21 +372,16 @@ class _VersionCardState extends State<_VersionCard> {
     final version = widget.version;
     final isCurrent = version.version == 'v${AppConfig.appVersion}';
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: isCurrent
-            ? Border.all(color: colorScheme.primary.withValues(alpha: .4))
-            : null,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Column(
+    return LiquidGlassCard(
+      borderRadius: AppRadius.lg,
+      padding: EdgeInsets.zero,
+      enableTouchFlex: false,
+      borderColor: isCurrent ? colorScheme.primary.withValues(alpha: .5) : null,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
@@ -473,10 +466,9 @@ class _VersionCardState extends State<_VersionCard> {
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
   }
-}
 
 class _ChangelogLine extends StatelessWidget {
   const _ChangelogLine({required this.text});

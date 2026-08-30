@@ -11,6 +11,7 @@ import '../../models/music_models.dart';
 import '../../services/music_api.dart';
 import '../widgets/artwork.dart';
 import '../adaptive_layout.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../widgets/status_bar_overlay.dart';
 
 /// 已下载歌曲与播放缓存管理页。
@@ -52,31 +53,36 @@ class _DownloadedSongsPageState extends State<DownloadedSongsPage>
   Widget build(BuildContext context) {
     return StatusBarOverlay(
       brightness: Theme.of(context).brightness,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('已下载'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: '已下载'),
-            Tab(text: '播放缓存'),
-          ],
+      child: LiquidGlassBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            title: const Text('已下载'),
+          bottom: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: '已下载'),
+              Tab(text: '播放缓存'),
+            ],
+          ),
         ),
-      ),
-      body: AdaptiveContentPadding(
-        child: TabBarView(
-          controller: _tabController,
-          children: [
-            _DownloadedList(
-              api: widget.api,
-              auth: widget.auth,
-              player: widget.player,
-              downloads: widget.downloads,
-            ),
-            _PlayCacheList(downloads: widget.downloads),
-          ],
+        body: AdaptiveContentPadding(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _DownloadedList(
+                api: widget.api,
+                auth: widget.auth,
+                player: widget.player,
+                downloads: widget.downloads,
+              ),
+              _PlayCacheList(downloads: widget.downloads),
+            ],
+          ),
         ),
-      ),
+        ),
       ),
     );
   }

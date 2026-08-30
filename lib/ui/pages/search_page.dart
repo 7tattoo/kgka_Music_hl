@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../design_tokens.dart';
 
 import '../../controllers/auth_controller.dart';
@@ -285,57 +286,65 @@ class _SearchPageState extends State<SearchPage> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 64,
-        titleSpacing: 4,
-        title: Container(
-          height: 42,
-          decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withValues(alpha: .54),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-          ),
-          child: TextField(
-            controller: _controller,
-            focusNode: _focusNode,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _onSubmit(),
-            style: Theme.of(context).textTheme.bodyLarge,
-            decoration: InputDecoration(
-              prefixIcon: Icon(
-                Icons.search_rounded,
-                color: colorScheme.onSurfaceVariant,
+    return LiquidGlassBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          toolbarHeight: 64,
+          titleSpacing: 4,
+          title: LiquidGlassCapsule(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: SizedBox(
+              height: 38,
+              child: TextField(
+                controller: _controller,
+                focusNode: _focusNode,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _onSubmit(),
+                style: Theme.of(context).textTheme.bodyLarge,
+                decoration: InputDecoration(
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                    size: 20,
+                  ),
+                  suffixIcon: _controller.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () {
+                            _controller.clear();
+                            _focusNode.requestFocus();
+                          },
+                        )
+                      : null,
+                  hintText: '搜索歌曲，歌手',
+                  hintStyle: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                ),
               ),
-              suffixIcon: _controller.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () {
-                        _controller.clear();
-                        _focusNode.requestFocus();
-                      },
-                    )
-                  : null,
-              hintText: '搜索歌曲，歌手',
-              hintStyle: TextStyle(color: colorScheme.onSurfaceVariant),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
             ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                '取消',
+                style: TextStyle(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              '取消',
-              style: TextStyle(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-        ],
-      ),
       body: AdaptiveContentPadding(
         child: Stack(
           children: [
@@ -353,6 +362,7 @@ class _SearchPageState extends State<SearchPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -561,32 +571,24 @@ class _PlatformSelector extends StatelessWidget {
       child: Row(
         children: [
           for (final p in _SearchPlatform.values) ...[
-            GestureDetector(
+            LiquidGlassCapsule(
+              isActive: platform == p,
               onTap: () => onChanged(p),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 7,
+              ),
+              child: Text(
+                p == _SearchPlatform.kugou ? '酷狗' : '网易云',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: platform == p
-                      ? colorScheme.primary
-                      : colorScheme.surfaceContainerHighest.withValues(
-                          alpha: .5,
-                        ),
-                  borderRadius: BorderRadius.circular(AppRadius.xl),
-                ),
-                child: Text(
-                  p == _SearchPlatform.kugou ? '酷狗' : '网易云',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: platform == p
-                        ? colorScheme.onPrimary
-                        : colorScheme.onSurfaceVariant,
-                    fontWeight: platform == p
-                        ? FontWeight.w800
-                        : FontWeight.w600,
-                  ),
+                      ? (Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white
+                          : colorScheme.primary)
+                      : colorScheme.onSurfaceVariant,
+                  fontWeight: platform == p
+                      ? FontWeight.w800
+                      : FontWeight.w600,
                 ),
               ),
             ),
@@ -815,23 +817,19 @@ class _CategoryTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: active
-          ? colorScheme.primary
-          : colorScheme.surfaceContainerHighest.withValues(alpha: .7),
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: active ? colorScheme.onPrimary : colorScheme.onSurface,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return LiquidGlassCapsule(
+      isActive: active,
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: active
+              ? (isDark ? Colors.white : colorScheme.primary)
+              : colorScheme.onSurface,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -847,11 +845,15 @@ class _CategoryKeywordList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount: keywords.length,
+    return LiquidGlassCard(
+      borderRadius: AppRadius.lg,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      enableTouchFlex: false,
+      child: ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        itemCount: keywords.length,
       itemBuilder: (context, index) {
         final item = keywords[index];
         final rank = index + 1;
@@ -909,7 +911,8 @@ class _CategoryKeywordList extends StatelessWidget {
           ),
         );
       },
-    );
+    ),
+  );
   }
 
   FontWeight _rankWeight(int rank) {
@@ -1244,38 +1247,31 @@ class _HistoryChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: colorScheme.surfaceContainerHighest.withValues(alpha: .6),
-      borderRadius: BorderRadius.circular(AppRadius.xl),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 14, top: 7, bottom: 7, right: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                keyword,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: onDelete,
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Icon(
-                    Icons.close_rounded,
-                    size: 16,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
+    return LiquidGlassCapsule(
+      onTap: onTap,
+      padding: const EdgeInsets.only(left: 12, top: 6, bottom: 6, right: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            keyword,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
-        ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onDelete,
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

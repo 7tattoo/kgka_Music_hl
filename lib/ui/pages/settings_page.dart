@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../design_tokens.dart';
 import '../widgets/status_bar_overlay.dart';
 
@@ -117,19 +118,25 @@ class SettingsPage extends StatelessWidget {
 
     return StatusBarOverlay(
       brightness: colorScheme.brightness,
-      child: Scaffold(
-        appBar: AppBar(title: const Text('设置')),
-        body: AnimatedBuilder(
-          animation: Listenable.merge([
-            auth,
-            player,
-            ?localMusic,
-            theme,
-          ]),
-          builder: (context, _) {
-            return AdaptiveContentPadding(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      child: LiquidGlassBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            title: const Text('设置'),
+          ),
+          body: AnimatedBuilder(
+            animation: Listenable.merge([
+              auth,
+              player,
+              ?localMusic,
+              theme,
+            ]),
+            builder: (context, _) {
+              return AdaptiveContentPadding(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
                 // Account section
                 _SectionHeader(title: '账号'),
@@ -411,8 +418,9 @@ class SettingsPage extends StatelessWidget {
                 ),
               ],
             ),
-          );
-        },
+            );
+          },
+        ),
       ),
       ),
     );
@@ -586,16 +594,11 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainer,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Column(children: children),
-      ),
+    return LiquidGlassCard(
+      borderRadius: AppRadius.lg,
+      padding: EdgeInsets.zero,
+      enableTouchFlex: false,
+      child: Column(children: children),
     );
   }
 }

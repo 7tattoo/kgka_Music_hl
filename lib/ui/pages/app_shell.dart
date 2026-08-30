@@ -1,5 +1,4 @@
 import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import '../design_tokens.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +10,7 @@ import '../../controllers/theme_controller.dart';
 import '../../controllers/local_music_controller.dart';
 import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
+import '../widgets/liquid_glass_ui.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/artwork.dart';
 import '../widgets/car_left_player_panel.dart';
@@ -404,7 +404,10 @@ class _AppShellState extends State<AppShell>
       },
       child: Scaffold(
         extendBody: true,
-        body: AdaptiveContentPadding(child: mainContent),
+        backgroundColor: Colors.transparent,
+        body: LiquidGlassBackground(
+          child: AdaptiveContentPadding(child: mainContent),
+        ),
         bottomNavigationBar: useNavRail
             ? null
             : _LiquidGlassBottomBar(
@@ -698,7 +701,6 @@ class _LiquidGlassBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
 
@@ -716,25 +718,26 @@ class _LiquidGlassBottomBar extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 360),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(100),
-            // 多层焦散与环境深度阴影
+            // iOS 26 超柔焦散深度悬浮阴影
             boxShadow: [
               BoxShadow(
                 color: isDark
-                    ? Colors.black.withValues(alpha: .40)
-                    : colorScheme.shadow.withValues(alpha: .12),
-                blurRadius: 28,
-                offset: const Offset(0, 10),
+                    ? Colors.black.withValues(alpha: .45)
+                    : const Color(0x14000000),
+                blurRadius: 36,
+                spreadRadius: -4,
+                offset: const Offset(0, 14),
               ),
               BoxShadow(
                 color: isDark
-                    ? Colors.black.withValues(alpha: .22)
-                    : colorScheme.shadow.withValues(alpha: .06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                    ? Colors.black.withValues(alpha: .20)
+                    : const Color(0x0A000000),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
               if (!isDark)
                 BoxShadow(
-                  color: Colors.white.withValues(alpha: .75),
+                  color: Colors.white.withValues(alpha: .95),
                   blurRadius: 10,
                   spreadRadius: 1,
                   offset: const Offset(0, -1),
@@ -744,30 +747,29 @@ class _LiquidGlassBottomBar extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(100),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+              filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(100),
-                  // 液态玻璃斜向渐变与高透光泽
+                  // iOS 26 极透微光物理透镜折射渐变
                   gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
                     colors: isDark
                         ? [
-                            colorScheme.surfaceContainerHighest.withValues(alpha: .68),
-                            colorScheme.surface.withValues(alpha: .40),
+                            const Color(0xFF1E2433).withValues(alpha: .52),
+                            const Color(0xFF10141D).withValues(alpha: .36),
                           ]
                         : [
-                            Colors.white.withValues(alpha: .80),
-                            Colors.white.withValues(alpha: .50),
+                            Colors.white.withValues(alpha: .52),
+                            Colors.white.withValues(alpha: .26),
                           ],
                   ),
-                  // 菲涅尔高光边缘
                   border: Border.all(
                     color: isDark
-                        ? Colors.white.withValues(alpha: .18)
-                        : Colors.white.withValues(alpha: .90),
-                    width: 1.2,
+                        ? Colors.white.withValues(alpha: .22)
+                        : Colors.white.withValues(alpha: .92),
+                    width: 1.1,
                   ),
                 ),
                 child: Row(
@@ -882,7 +884,7 @@ class _CenterPlayerDiscState extends State<_CenterPlayerDisc>
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // 1. 外圈环形播放进度条
+                  // 1. 外圈环形播放进度条（仅显示已播放进度弧线）
                   SizedBox.square(
                     dimension: 46,
                     child: CircularProgressIndicator(
@@ -892,9 +894,7 @@ class _CenterPlayerDiscState extends State<_CenterPlayerDisc>
                       valueColor: AlwaysStoppedAnimation<Color>(
                         colorScheme.primary,
                       ),
-                      backgroundColor: colorScheme.primary.withValues(
-                        alpha: .18,
-                      ),
+                      backgroundColor: Colors.transparent,
                     ),
                   ),
                   // 2. 内部黑胶唱片/专辑封面
@@ -1002,22 +1002,16 @@ class _LiquidNavItem extends StatelessWidget {
           splashColor: selectedColor.withValues(alpha: .12),
           highlightColor: selectedColor.withValues(alpha: .06),
           child: Center(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(100),
-                color: isSelected
-                    ? selectedColor.withValues(alpha: .10)
-                    : Colors.transparent,
-              ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOutBack,
+                    switchOutCurve: Curves.easeInCubic,
                     transitionBuilder: (child, anim) => ScaleTransition(
                       scale: anim,
                       child: child,
@@ -1026,7 +1020,7 @@ class _LiquidNavItem extends StatelessWidget {
                       isSelected ? activeIcon : icon,
                       key: ValueKey<bool>(isSelected),
                       color: isSelected ? selectedColor : unselectedColor,
-                      size: 22,
+                      size: isSelected ? 23 : 22,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1034,7 +1028,7 @@ class _LiquidNavItem extends StatelessWidget {
                     label,
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
                       color: isSelected ? selectedColor : unselectedColor,
                       height: 1.1,
                     ),
