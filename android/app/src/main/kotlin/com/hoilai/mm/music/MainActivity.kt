@@ -552,17 +552,12 @@ class MainActivity : AudioServiceActivity() {
                             setPackage(null)
                         }, null)
 
-                        // 兼容不同车机/第三方 App 的常见 action
-                        listOf(
-                            "com.android.music.playbackcomplete",
-                            "com.android.music.queuechanged",
-                            "com.android.music.playstatechanged",
-                        ).forEach { action ->
-                            sendBroadcast(Intent(action).apply {
-                                putExtras(Bundle(extras))
-                                setPackage(null)
-                            })
-                        }
+                        // 注意：per-line 元数据广播只发 metachanged 系。
+                        // 严禁在此发送 playbackcomplete / queuechanged /
+                        // playstatechanged——这些是"播放完成/队列变化/状态切换"
+                        // 语义信号，随歌词逐句误发会导致车机、仪表盘误判切歌
+                        // 或清空状态；真实状态变化由 broadcastPlayStateChanged
+                        // 专用通道发送。
 
                         // QQMusic / Netease 自定义广播（很多车机 App 监听）
                         sendBroadcast(Intent("com.netease.cloudmusic.metachanged").apply {
@@ -586,7 +581,7 @@ class MainActivity : AudioServiceActivity() {
                         Log.d(
                             TAG_BLUETOOTH_LYRICS,
                             "metaChanged ok: \"$title\"/\"$artist\", lyric=\"${lyric.take(24)}\", " +
-                                "pos=${positionMs}ms, playing=$playing, track=$track/$listSize, 7 actions sent"
+                                "pos=${positionMs}ms, playing=$playing, track=$track/$listSize, 5 actions sent"
                         )
                         result.success(true)
                     }.onFailure { error ->

@@ -1385,6 +1385,8 @@ class PlayerController extends ChangeNotifier {
     if (!bluetoothLyricsEnabled || currentSong == null) return;
     final song = currentSong!;
     final resolvedIndex = index ?? (lyrics.isEmpty ? -1 : activeLyricIndex);
+    // 行变化判定基准快照（下方 if/else 会更新 _lastBluetoothLyricIndex）
+    final prevIndex = _lastBluetoothLyricIndex;
 
     final String lyricText;
     final String? translationText;
@@ -1413,7 +1415,10 @@ class PlayerController extends ChangeNotifier {
     );
 
     // 2. 系统广播 + 各 App 自定义广播
-    final lineChanged = force || resolvedIndex != index || lyricText.isNotEmpty;
+    // 行变化判定必须用快照对比：不能用恒真的 lyricText.isNotEmpty，
+    // 否则 lineChanged 恒真、forcePlayState 分支永远无法执行，
+    // 播放/暂停状态广播会被静默吞掉。
+    final lineChanged = force || prevIndex != _lastBluetoothLyricIndex;
     if (lineChanged) {
       unawaited(
         _bluetoothLyrics.broadcastMetaChanged(
@@ -1428,7 +1433,9 @@ class PlayerController extends ChangeNotifier {
           listSize: queue.length,
         ),
       );
-    } else if (forcePlayState) {
+    }
+    // 播放/暂停状态变化独立发送，不依赖行是否变化。
+    if (forcePlayState) {
       unawaited(
         _bluetoothLyrics.broadcastPlayStateChanged(
           title: song.title,
