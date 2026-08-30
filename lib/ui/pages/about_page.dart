@@ -66,133 +66,140 @@ class _AboutPageState extends State<AboutPage> {
     return Scaffold(
       body: AdaptiveContentPadding(
         child: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            title: const Text('关于'),
-            surfaceTintColor: Colors.transparent,
-            backgroundColor: colorScheme.surface,
-          ),
-          SliverToBoxAdapter(
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                _AppLogo(),
-                const SizedBox(height: 16),
-                Text(
-                  AppConfig.appName,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '版本 ${AppConfig.appVersion}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '一个专注播放体验的音乐应用。',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: AppUpdateService.isSupportedPlatform
-                            ? FilledButton.icon(
-                                onPressed: () => checkAppUpdateManually(
-                                  context: context,
-                                  api: widget.api,
-                                ),
-                                icon: const Icon(Icons.system_update_alt_rounded),
-                                label: const Text('检查更新'),
-                              )
-                            : OutlinedButton.icon(
-                                onPressed: null,
-                                icon: const Icon(Icons.system_update_alt_rounded),
-                                label: const Text('暂不支持检查更新'),
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+          slivers: [
+            SliverAppBar(
+              pinned: true,
+              title: const Text('关于'),
+              surfaceTintColor: Colors.transparent,
+              backgroundColor: colorScheme.surface,
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
-              child: _InfoSection(
+            SliverToBoxAdapter(
+              child: Column(
                 children: [
-                  const _InfoRow(label: '应用名称', value: AppConfig.appName),
-                  const _InfoRow(label: '当前版本', value: AppConfig.appVersion),
-                  _InfoRow(
-                    label: '服务地址',
-                    value: AppConfig.hasCustomBaseUrl
-                        ? AppConfig.customBaseUrl!
-                        : AppConfig.apiBaseUrl,
+                  const SizedBox(height: 12),
+                  _AppLogo(),
+                  const SizedBox(height: 16),
+                  Text(
+                    AppConfig.appName,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                  _InfoLinkRow(
-                    label: 'GitHub',
-                    value: 'umr-xiaomai/kgka_Music_hl',
-                    onTap: () => _openRepository(context),
+                  const SizedBox(height: 6),
+                  Text(
+                    '版本 ${AppConfig.appVersion}',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '一个专注播放体验的音乐应用。',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 22),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: AppUpdateService.isSupportedPlatform
+                              ? FilledButton.icon(
+                                  onPressed: () => checkAppUpdateManually(
+                                    context: context,
+                                    api: widget.api,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.system_update_alt_rounded,
+                                  ),
+                                  label: const Text('检查更新'),
+                                )
+                              : OutlinedButton.icon(
+                                  onPressed: null,
+                                  icon: const Icon(
+                                    Icons.system_update_alt_rounded,
+                                  ),
+                                  label: const Text('暂不支持检查更新'),
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-          if (_changelogLoaded && _versions.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(22, 24, 22, 8),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(22, 18, 22, 8),
+                child: _InfoSection(
                   children: [
-                    Icon(
-                      Icons.history_rounded,
-                      size: 20,
-                      color: colorScheme.primary,
+                    const _InfoRow(label: '应用名称', value: AppConfig.appName),
+                    const _InfoRow(label: '当前版本', value: AppConfig.appVersion),
+                    const _InfoRow(
+                      label: '作者',
+                      value: '小埋-XiaoMai，其他Github开发者',
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '更新日志',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    _InfoRow(
+                      label: '服务地址',
+                      value: AppConfig.hasCustomBaseUrl
+                          ? AppConfig.customBaseUrl!
+                          : AppConfig.apiBaseUrl,
+                    ),
+                    _InfoLinkRow(
+                      label: 'GitHub',
+                      value: 'umr-xiaomai/kgka_Music_hl',
+                      onTap: () => _openRepository(context),
                     ),
                   ],
                 ),
               ),
             ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 22),
-              sliver: SliverList.separated(
-                itemCount: _versions.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final version = _versions[index];
-                  return _VersionCard(
-                    version: version,
-                    initiallyExpanded: index == 0,
-                  );
-                },
+            if (_changelogLoaded && _versions.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.history_rounded,
+                        size: 20,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '更新日志',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-          ] else if (_changelogLoaded) ...[
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                sliver: SliverList.separated(
+                  itemCount: _versions.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final version = _versions[index];
+                    return _VersionCard(
+                      version: version,
+                      initiallyExpanded: index == 0,
+                    );
+                  },
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ] else if (_changelogLoaded) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
   }
 }
 
@@ -349,10 +356,7 @@ class _InfoRow extends StatelessWidget {
 
 /// 单个版本的更新日志卡片，可展开/收起。
 class _VersionCard extends StatefulWidget {
-  const _VersionCard({
-    required this.version,
-    this.initiallyExpanded = false,
-  });
+  const _VersionCard({required this.version, this.initiallyExpanded = false});
 
   final ChangelogVersion version;
   final bool initiallyExpanded;
@@ -404,21 +408,21 @@ class _VersionCardState extends State<_VersionCard> {
                         ),
                         child: Text(
                           version.version,
-                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: isCurrent
-                                ? colorScheme.onPrimary
-                                : colorScheme.primary,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: isCurrent
+                                    ? colorScheme.onPrimary
+                                    : colorScheme.primary,
+                                fontWeight: FontWeight.w800,
+                              ),
                         ),
                       ),
                       if (version.date != null) ...[
                         const SizedBox(width: 10),
                         Text(
                           version.date!,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
                       ],
                       const Spacer(),
@@ -446,16 +450,16 @@ class _VersionCardState extends State<_VersionCard> {
                       children: [
                         Divider(
                           height: 1,
-                          color: colorScheme.outlineVariant
-                              .withValues(alpha: .4),
+                          color: colorScheme.outlineVariant.withValues(
+                            alpha: .4,
+                          ),
                         ),
                         const SizedBox(height: 10),
                         if (version.lines.isEmpty)
                           Text(
                             '暂无更新说明',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
                           )
                         else
                           ...version.lines.map(
@@ -498,9 +502,7 @@ class _ChangelogLine extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            child: _buildRichText(context, text),
-          ),
+          Expanded(child: _buildRichText(context, text)),
         ],
       ),
     );
@@ -514,30 +516,33 @@ class _ChangelogLine extends StatelessWidget {
 
     for (final match in boldPattern.allMatches(text)) {
       if (match.start > lastEnd) {
-        spans.add(TextSpan(
-          text: text.substring(lastEnd, match.start),
-          style: TextStyle(color: colorScheme.onSurface),
-        ));
+        spans.add(
+          TextSpan(
+            text: text.substring(lastEnd, match.start),
+            style: TextStyle(color: colorScheme.onSurface),
+          ),
+        );
       }
-      spans.add(TextSpan(
-        text: match.group(1),
-        style: const TextStyle(fontWeight: FontWeight.w800),
-      ));
+      spans.add(
+        TextSpan(
+          text: match.group(1),
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+      );
       lastEnd = match.end;
     }
 
     if (lastEnd < text.length) {
-      spans.add(TextSpan(
-        text: text.substring(lastEnd),
-        style: TextStyle(color: colorScheme.onSurface),
-      ));
+      spans.add(
+        TextSpan(
+          text: text.substring(lastEnd),
+          style: TextStyle(color: colorScheme.onSurface),
+        ),
+      );
     }
 
     if (spans.isEmpty) {
-      return Text(
-        text,
-        style: TextStyle(color: colorScheme.onSurface),
-      );
+      return Text(text, style: TextStyle(color: colorScheme.onSurface));
     }
 
     return RichText(
@@ -577,20 +582,22 @@ class ChangelogVersion {
       final line = rawLine.trim();
       if (line.startsWith('## ') && line.contains(RegExp(r'v\d+\.\d+'))) {
         if (currentVersion.isNotEmpty) {
-          versions.add(ChangelogVersion(
-            version: currentVersion['version'] as String,
-            date: currentVersion['date'] as String?,
-            lines: List<String>.from(currentLines),
-          ));
+          versions.add(
+            ChangelogVersion(
+              version: currentVersion['version'] as String,
+              date: currentVersion['date'] as String?,
+              lines: List<String>.from(currentLines),
+            ),
+          );
         }
         final header = line.substring(3).trim();
         final match = RegExp(r'(v\d+\.\d+(?:\.\d+)?)(.*)').firstMatch(header);
         currentVersion = {
           'version': match?.group(1) ?? header,
           'date': (match?.group(2) ?? '').trim().replaceAll(
-                RegExp(r'^[\s\-—:：]+'),
-                '',
-              ),
+            RegExp(r'^[\s\-—:：]+'),
+            '',
+          ),
         };
         currentLines = [];
         continue;
@@ -608,11 +615,13 @@ class ChangelogVersion {
     }
 
     if (currentVersion.isNotEmpty) {
-      versions.add(ChangelogVersion(
-        version: currentVersion['version'] as String,
-        date: currentVersion['date'] as String?,
-        lines: List<String>.from(currentLines),
-      ));
+      versions.add(
+        ChangelogVersion(
+          version: currentVersion['version'] as String,
+          date: currentVersion['date'] as String?,
+          lines: List<String>.from(currentLines),
+        ),
+      );
     }
 
     return versions;
