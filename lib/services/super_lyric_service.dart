@@ -97,7 +97,10 @@ class SuperLyricService {
     required LyricLine line,
     Duration? lineEndTime,
   }) async {
-    if (!isSupportedPlatform || !_registered) return;
+    // 只按平台门控；注册状态交给下方自愈块处理。
+    // ⚠️ 不能在这里写 `|| !_registered` 提前返回，否则下方自愈注册
+    // 变成不可达死代码，注册失败过的会话将永远发不出歌词。
+    if (!isSupportedPlatform) return;
     final int endMs;
     if (lineEndTime != null) {
       endMs = lineEndTime.inMilliseconds;

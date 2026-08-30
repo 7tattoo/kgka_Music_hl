@@ -1302,9 +1302,11 @@ class PlayerController extends ChangeNotifier {
 
   int _lastDesktopLyricIndex = -1;
   int _lastSuperLyricIndex = -1;
-  bool _lastSuperLyricPlaying = true;
+  // 初始为 false：App 启动时通常处于暂停态，若初始为 true，
+  // 首个 position tick 就会向系统发送一次无意义的 stop/playstate 广播。
+  bool _lastSuperLyricPlaying = false;
   int _lastBluetoothLyricIndex = -1;
-  bool _lastBluetoothPlaying = true;
+  bool _lastBluetoothPlaying = false;
 
   void _maybeSyncDesktopLyricFromPosition() {
     if (!_shouldShowDesktopLyrics || lyrics.isEmpty) return;
