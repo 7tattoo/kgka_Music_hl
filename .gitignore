@@ -50,3 +50,9 @@ app.*.map.json
 key.properties
 
 .ace-tool/
+
+# SeekClaw
+.seekclaw/
+.session/
+.cache/
+logs/
