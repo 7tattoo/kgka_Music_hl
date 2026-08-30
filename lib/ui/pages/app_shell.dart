@@ -211,6 +211,10 @@ class _AppShellState extends State<AppShell>
           canPop: false,
           onPopInvokedWithResult: (didPop, _) {
             if (didPop) return;
+            if (_playerVisible) {
+              _closePlayer();
+              return;
+            }
             final nav = _navigatorKey.currentState;
             if (nav != null && nav.canPop()) {
               nav.pop();
@@ -389,60 +393,69 @@ class _AppShellState extends State<AppShell>
       );
     }
 
-    return _wrapPlayerOverlay(Scaffold(
-      extendBody: true,
-      body: AdaptiveContentPadding(child: mainContent),
-      bottomNavigationBar: useNavRail
-          ? null
-          : ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? colorScheme.surfaceContainerHighest.withValues(
-                            alpha: .72,
-                          )
-                        : colorScheme.surfaceContainerHighest.withValues(
-                            alpha: .64,
+    return _wrapPlayerOverlay(PopScope(
+      canPop: !_playerVisible,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_playerVisible) {
+          _closePlayer();
+        }
+      },
+      child: Scaffold(
+        extendBody: true,
+        body: AdaptiveContentPadding(child: mainContent),
+        bottomNavigationBar: useNavRail
+            ? null
+            : ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? colorScheme.surfaceContainerHighest.withValues(
+                              alpha: .72,
+                            )
+                          : colorScheme.surfaceContainerHighest.withValues(
+                              alpha: .64,
+                            ),
+                      border: Border(
+                        top: BorderSide(
+                          color: colorScheme.outlineVariant.withValues(
+                            alpha: .38,
                           ),
-                    border: Border(
-                      top: BorderSide(
-                        color: colorScheme.outlineVariant.withValues(
-                          alpha: .38,
                         ),
                       ),
                     ),
-                  ),
-                  child: BottomNavigationBar(
-                    currentIndex: portraitIndex,
-                    onTap: _setPortraitIndex,
-                    backgroundColor: Colors.transparent,
-                    elevation: 0,
-                    selectedItemColor: colorScheme.primary,
-                    unselectedItemColor: colorScheme.onSurface,
-                    selectedLabelStyle: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                    ),
-                    unselectedLabelStyle: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    items: const [
-                      BottomNavigationBarItem(
-                        icon: Icon(Icons.home_outlined),
-                        activeIcon: Icon(Icons.home_rounded),
-                        label: '首页',
+                    child: BottomNavigationBar(
+                      currentIndex: portraitIndex,
+                      onTap: _setPortraitIndex,
+                      backgroundColor: Colors.transparent,
+                      elevation: 0,
+                      selectedItemColor: colorScheme.primary,
+                      unselectedItemColor: colorScheme.onSurface,
+                      selectedLabelStyle: const TextStyle(
+                        fontWeight: FontWeight.w800,
                       ),
-                      BottomNavigationBarItem(
-                        icon: Icon(Icons.person_outline_rounded),
-                        activeIcon: Icon(Icons.person_rounded),
-                        label: '我的',
+                      unselectedLabelStyle: const TextStyle(
+                        fontWeight: FontWeight.w600,
                       ),
-                    ],
+                      items: const [
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.home_outlined),
+                          activeIcon: Icon(Icons.home_rounded),
+                          label: '首页',
+                        ),
+                        BottomNavigationBarItem(
+                          icon: Icon(Icons.person_outline_rounded),
+                          activeIcon: Icon(Icons.person_rounded),
+                          label: '我的',
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+      ),
     ));
   }
 
