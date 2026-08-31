@@ -1128,12 +1128,16 @@ class DailyRecommend {
     required this.title,
     this.subtitle,
     this.coverUrl,
+    this.date,
     required this.songs,
   });
 
   final String title;
   final String? subtitle;
   final String? coverUrl;
+
+  /// 推荐日期，上游 `creation_date`，格式 yyyyMMdd（可能为空）。
+  final String? date;
   final List<Song> songs;
 
   factory DailyRecommend.fromJson(Map<String, dynamic> json) {
@@ -1142,6 +1146,7 @@ class DailyRecommend {
       title: date == null ? '每日推荐' : '每日推荐 $date',
       subtitle: asString(json['sub_title']),
       coverUrl: normalizeImageUrl(asString(json['cover_img_url'])),
+      date: date,
       songs: asList(json['song_list'])
           .whereType<Map<String, dynamic>>()
           .map(Song.fromDaily)
@@ -1154,6 +1159,7 @@ class DailyRecommend {
         'title': title,
         'subtitle': subtitle,
         'coverUrl': coverUrl,
+        'date': date,
         'songs': songs.map((s) => s.toCache()).toList(),
       };
 
@@ -1162,6 +1168,7 @@ class DailyRecommend {
       title: asString(json['title']) ?? '每日推荐',
       subtitle: asString(json['subtitle']),
       coverUrl: asString(json['coverUrl']),
+      date: asString(json['date']),
       songs: asList(json['songs'])
           .whereType<Map<String, dynamic>>()
           .map(Song.fromCache)

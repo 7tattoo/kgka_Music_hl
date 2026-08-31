@@ -348,6 +348,24 @@ class _HomePageState extends State<HomePage> {
     widget.player.playSong(song, queue: queue);
   }
 
+  /// 每日推荐区块副标题：优先用上游推荐语，否则显示日期（yyyyMMdd → M月d日）。
+  String? _dailySubtitle(DailyRecommend daily) {
+    final subtitle = daily.subtitle?.trim();
+    if (subtitle != null && subtitle.isNotEmpty) {
+      return subtitle;
+    }
+    final date = daily.date;
+    if (date == null || date.length != 8) {
+      return null;
+    }
+    final month = int.tryParse(date.substring(4, 6));
+    final day = int.tryParse(date.substring(6, 8));
+    if (month == null || day == null) {
+      return null;
+    }
+    return '$month月$day日 · 根据你的口味推荐';
+  }
+
   Future<void> _loadPersonalFmPreview({bool force = false}) async {
     if (force) {
       _hasRequestedPersonalFmPreview = false;
@@ -511,7 +529,11 @@ class _HomePageState extends State<HomePage> {
                         child: Column(
                           children: [
                             _SongSection(
-                              title: '母带音质·精选',
+                              // 每日推荐（酷狗 /recommend/songs → everyday_song_recommend）：
+                              // 数据本来就是每日推荐，此前标题写作"母带音质·精选"
+                              // 与内容不符，改为真实语义并带上日期/推荐语副标题。
+                              title: '每日推荐',
+                              subtitle: _dailySubtitle(data.daily),
                               songs: data.daily.songs,
                               onPlay: _playSong,
                               isLiked: (song) => widget.auth.isLiked(song),
@@ -1015,6 +1037,7 @@ class _SongSection extends StatefulWidget {
     required this.auth,
     required this.player,
     required this.onViewArtist,
+    this.subtitle,
   });
 
   final String title;
@@ -1025,6 +1048,9 @@ class _SongSection extends StatefulWidget {
   final AuthController auth;
   final PlayerController player;
   final void Function(Song song) onViewArtist;
+
+  /// 区块副标题（每日推荐用来显示日期/推荐语），为空时不占位。
+  final String? subtitle;
 
   @override
   State<_SongSection> createState() => _SongSectionState();
@@ -1072,6 +1098,21 @@ class _SongSectionState extends State<_SongSection> {
                   ),
                 ),
               ),
+              if (widget.subtitle?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 2),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    widget.subtitle!.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               LayoutBuilder(
                 builder: (context, constraints) {
