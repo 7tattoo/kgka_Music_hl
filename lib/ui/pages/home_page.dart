@@ -9,12 +9,9 @@ import '../design_tokens.dart';
 import '../../config/app_config.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
-import '../../models/app_version.dart';
 import '../../models/music_models.dart';
-import '../../services/app_update_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
-import '../widgets/app_update_widgets.dart';
 import '../widgets/artwork.dart';
 import '../widgets/now_playing_badge.dart';
 import '../widgets/song_action_sheets.dart';
@@ -62,11 +59,7 @@ class _HomePageState extends State<HomePage> {
   static bool _hasAutoPlayed = false;
 
   Future<_HomeData>? _future;
-  late final AppUpdateService _updateService;
-  AppVersionInfo? _availableUpdate;
   var _sectionIndex = 0;
-  var _updateBannerDismissed = false;
-  var _autoUpdateDialogShown = false;
   var _isStartingPersonalFm = false;
   var _isLoadingPersonalFmPreview = false;
   var _hasRequestedPersonalFmPreview = false;
@@ -76,7 +69,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _sectionIndex = widget.sectionIndex;
-    _updateService = AppUpdateService(widget.api);
     final cached = _cachedData;
     if (cached != null) {
       _future = Future.value(cached);
@@ -92,9 +84,6 @@ class _HomePageState extends State<HomePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadPersonalFmPreview();
     });
-    if (AppUpdateService.isSupportedPlatform) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
-    }
   }
 
   @override
@@ -299,48 +288,6 @@ class _HomePageState extends State<HomePage> {
         ? _loadPersonalFmPreview(force: true)
         : Future<void>.value();
     await Future.wait([future, fmFuture]);
-  }
-
-  Future<void> _checkForUpdates() async {
-    try {
-      final version = await _updateService.checkForUpdate();
-      if (!mounted || version == null) {
-        return;
-      }
-
-      if (version.forceUpdate) {
-        if (_autoUpdateDialogShown) {
-          return;
-        }
-        _autoUpdateDialogShown = true;
-        await showAppUpdateDialog(
-          context: context,
-          service: _updateService,
-          version: version,
-          force: true,
-        );
-        return;
-      }
-
-      if (!_updateBannerDismissed) {
-        setState(() => _availableUpdate = version);
-      }
-    } catch (_) {
-      // The automatic check should stay quiet; manual checks surface errors.
-    }
-  }
-
-  Future<void> _showUpdateDetails() {
-    final version = _availableUpdate;
-    if (version == null) {
-      return Future.value();
-    }
-    return showAppUpdateDialog(
-      context: context,
-      service: _updateService,
-      version: version,
-      force: false,
-    );
   }
 
   void _openPlaylist(PlaylistSummary playlist) {
@@ -553,15 +500,6 @@ class _HomePageState extends State<HomePage> {
                     onAlbumTap: _openAlbumShop,
                     api: widget.api,
                     player: widget.player,
-                    updateVersion: _updateBannerDismissed
-                        ? null
-                        : _availableUpdate,
-                    onUpdateTap: () {
-                      _showUpdateDetails();
-                    },
-                    onUpdateClose: () {
-                      setState(() => _updateBannerDismissed = true);
-                    },
                     onSettingsTap: _openSettings,
                   ),
                 ),
@@ -636,9 +574,6 @@ class _RecommendHeader extends StatelessWidget {
     required this.onAlbumTap,
     required this.api,
     required this.player,
-    required this.updateVersion,
-    required this.onUpdateTap,
-    required this.onUpdateClose,
     required this.onSettingsTap,
   });
 
@@ -652,9 +587,6 @@ class _RecommendHeader extends StatelessWidget {
   final VoidCallback onAlbumTap;
   final MusicApi api;
   final PlayerController player;
-  final AppVersionInfo? updateVersion;
-  final VoidCallback onUpdateTap;
-  final VoidCallback onUpdateClose;
   final VoidCallback onSettingsTap;
 
   @override
@@ -691,17 +623,6 @@ class _RecommendHeader extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(right: 18),
                   child: _SmartSearch(api: api, auth: auth, player: player),
-                ),
-              ],
-              if (updateVersion != null) ...[
-                const SizedBox(height: 10),
-                Padding(
-                  padding: const EdgeInsets.only(right: 18),
-                  child: AppUpdateBanner(
-                    version: updateVersion!,
-                    onTap: onUpdateTap,
-                    onClose: onUpdateClose,
-                  ),
                 ),
               ],
               if (sectionIndex == 0) ...[

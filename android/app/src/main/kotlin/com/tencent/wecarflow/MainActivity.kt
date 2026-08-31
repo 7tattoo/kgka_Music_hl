@@ -1,7 +1,6 @@
-package com.hoilai.mm.music
+package com.tencent.wecarflow
 
 import android.Manifest
-import android.app.DownloadManager
 import android.content.BroadcastReceiver
 import android.content.ContentUris
 import android.content.Context
@@ -12,7 +11,6 @@ import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
@@ -22,7 +20,6 @@ import android.media.audiofx.DynamicsProcessing
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import com.ryanheise.audioservice.AudioServiceActivity
@@ -30,11 +27,8 @@ import com.hchen.superlyricapi.SuperLyricHelper
 import com.hchen.superlyricapi.SuperLyricData
 import com.hchen.superlyricapi.SuperLyricLine
 import com.hchen.superlyricapi.SuperLyricWord
-import java.io.File
 
 class MainActivity : AudioServiceActivity() {
-    private val updateDownloads = mutableMapOf<Long, String>()
-    private var downloadReceiverRegistered = false
     private var lyricsStateReceiverRegistered = false
     private var desktopLyricsChannel: MethodChannel? = null
     private var superLyricChannel: MethodChannel? = null
@@ -51,16 +45,6 @@ class MainActivity : AudioServiceActivity() {
         private const val REQUEST_READ_AUDIO = 1001
         private const val TAG_SUPER_LYRIC = "SuperLyricPublisher"
         private const val TAG_BLUETOOTH_LYRICS = "BluetoothLyrics"
-    }
-
-    private val downloadReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-            val fileName = updateDownloads.remove(downloadId) ?: return
-            if (isDownloadSuccessful(downloadId)) {
-                installDownloadedApk(fileName)
-            }
-        }
     }
 
     private val lyricsStateReceiver = object : BroadcastReceiver() {
@@ -103,34 +87,12 @@ class MainActivity : AudioServiceActivity() {
                 }
             }
 
-        // 车机检测：isAutomotive 判别车机。
+        // 车机检测：isAutomotive 判别车机，isCarProjection 判别车载投屏环境。
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/device")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "isAutomotive" -> result.success(isAutomotiveDevice())
-                    else -> result.notImplemented()
-                }
-            }
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "kgka_music_hl/update")
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "downloadAndInstallApk" -> {
-                        val url = call.argument<String>("url")
-                        val fileName = call.argument<String>("fileName") ?: "ka_music_update.apk"
-                        if (url.isNullOrBlank()) {
-                            result.error("invalid_url", "APK download url is empty", null)
-                            return@setMethodCallHandler
-                        }
-
-                        runCatching {
-                            enqueueApkDownload(url, fileName)
-                        }.onSuccess {
-                            result.success(null)
-                        }.onFailure { error ->
-                            result.error("download_failed", error.message, null)
-                        }
-                    }
+                    "isCarProjection" -> result.success(isCarProjection())
                     else -> result.notImplemented()
                 }
             }
@@ -949,86 +911,45 @@ class MainActivity : AudioServiceActivity() {
         dynamicsProcessingSessionId = null
     }
 
-    private fun enqueueApkDownload(url: String, fileName: String) {
-        val request = DownloadManager.Request(Uri.parse(url))
-            .setTitle("KA Music 更新包")
-            .setDescription("正在下载新版本")
-            .setMimeType("application/vnd.android.package-archive")
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName)
-
-        val downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-        val downloadId = downloadManager.enqueue(request)
-        updateDownloads[downloadId] = fileName
-        registerDownloadReceiver()
-    }
-
-    private fun registerDownloadReceiver() {
-        if (downloadReceiverRegistered) {
-            return
-        }
-        val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            registerReceiver(downloadReceiver, filter)
-        }
-        downloadReceiverRegistered = true
-    }
-
-    private fun isDownloadSuccessful(downloadId: Long): Boolean {
-        val downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-        val query = DownloadManager.Query().setFilterById(downloadId)
-        var cursor: Cursor? = null
-        return try {
-            cursor = downloadManager.query(query)
-            cursor != null &&
-                cursor.moveToFirst() &&
-                cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) ==
-                DownloadManager.STATUS_SUCCESSFUL
-        } finally {
-            cursor?.close()
-        }
-    }
-
-    private fun installDownloadedApk(fileName: String) {
-        val apkFile = File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
-        if (!apkFile.exists()) {
-            return
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !packageManager.canRequestPackageInstalls()
-        ) {
-            startActivity(
-                Intent(
-                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:$packageName")
-                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-            return
-        }
-
-        val apkUri = FileProvider.getUriForFile(
-            this,
-            "$packageName.fileprovider",
-            apkFile
-        )
-        val installIntent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(apkUri, "application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        startActivity(installIntent)
-    }
-
     /// 是否为 Android Automotive 车机设备。
     /// 仅依赖官方 FEATURE_AUTOMOTIVE 标记：国产定制 AOSP 车机通常未声明，
     /// 会判为 false，需用户在设置→个性化手动开启车机模式。
     private fun isAutomotiveDevice(): Boolean {
-        return packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
+        // 1. Android Automotive 车机（内置车机）
+        if (packageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) return true
+        // 2. 车载 UI 模式（vivo 车联/Android Auto/亿连等投屏会设置）
+        if (isCarUiMode()) return true
+        return false
+    }
+
+    /// 是否为车载投屏 UI 模式。
+    private fun isCarUiMode(): Boolean {
+        return try {
+            val uiMode = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_TYPE_MASK
+            uiMode == android.content.res.Configuration.UI_MODE_TYPE_CAR
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /// 是否为车载投屏环境（独立于 isAutomotiveDevice 的额外检测）。
+    /// 用于播放页等场景在投屏时自动启用分栏布局。
+    private fun isCarProjection(): Boolean {
+        // 1. 车载 UI 模式
+        if (isCarUiMode()) return true
+        // 2. 检测外接显示（无线投屏到车机等场景）
+        try {
+            val displayManager = getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager
+            val displays = displayManager.displays
+            if (displays.any { it.displayId != android.view.Display.DEFAULT_DISPLAY }) {
+                return true
+            }
+        } catch (_: Exception) {}
+        // 3. 检测 vivo 车联特征
+        try {
+            if (packageManager.hasSystemFeature("com.vivo.feature.car")) return true
+        } catch (_: Exception) {}
+        return false
     }
 
     private fun getAlbumArtBytes(albumId: Long): ByteArray? {
@@ -1062,10 +983,6 @@ class MainActivity : AudioServiceActivity() {
         if (superLyricRegistered) {
             runCatching { SuperLyricHelper.unregisterPublisher() }
             superLyricRegistered = false
-        }
-        if (downloadReceiverRegistered) {
-            unregisterReceiver(downloadReceiver)
-            downloadReceiverRegistered = false
         }
         if (lyricsStateReceiverRegistered) {
             unregisterReceiver(lyricsStateReceiver)

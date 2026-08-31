@@ -1,7 +1,7 @@
 name: kgka_music_hl
 description: "the best music application"
 publish_to: 'none'
-version: 3.0.0
+version: 3.0.1
 
 environment:
   sdk: ^3.11.5
@@ -33,5 +33,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - update.md
     - lib/assets/logo.png

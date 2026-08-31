@@ -9,7 +9,6 @@ import '../../controllers/download_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../controllers/local_music_controller.dart';
-import '../../services/app_update_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/music_api.dart';
 import '../widgets/audio_effects_sheet.dart';
@@ -222,6 +221,15 @@ class SettingsPage extends StatelessWidget {
                         value: player.bluetoothLyricsEnabled,
                         onChanged: player.setBluetoothLyricsEnabled,
                       ),
+                      _SettingsDivider(),
+                      _SettingsSwitchTile(
+                        icon: Icons.lyrics_outlined,
+                        iconColor: colorScheme.primary,
+                        title: '车载投屏主页滚动歌词',
+                        subtitle: 'vivo 智能车载投屏时在主页显示整首滚动歌词（模式开启）',
+                        value: player.carLyricsEnabled,
+                        onChanged: player.setCarLyricsEnabled,
+                      ),
                     ],
                     _SettingsDivider(),
                     _SettingsSwitchTile(
@@ -416,9 +424,7 @@ class SettingsPage extends StatelessWidget {
                       icon: Icons.info_outline_rounded,
                       iconColor: colorScheme.primary,
                       title: '关于',
-                      subtitle: AppUpdateService.isSupportedPlatform
-                          ? '版本、更新日志与检查更新'
-                          : '版本与更新日志',
+                      subtitle: '版本信息',
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => AboutPage(api: api),

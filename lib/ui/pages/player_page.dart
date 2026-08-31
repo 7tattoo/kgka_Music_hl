@@ -15,6 +15,7 @@ import '../../controllers/auth_controller.dart';
 import '../../controllers/player_controller.dart';
 import '../../controllers/theme_controller.dart';
 import '../../models/music_models.dart';
+import '../../services/device_info_service.dart';
 import '../../services/lyric_converter.dart';
 import '../widgets/audio_effects_sheet.dart';
 import '../widgets/audio_quality_sheet.dart';
@@ -177,8 +178,37 @@ class _PlayerBodyState extends State<_PlayerBody> {
   var _page = 0;
   var _pageScrolling = false;
   bool? _lastSystemUiLandscape;
+  bool? _carProjection;
 
   bool get _lyricPageVisible => _page == 1 || _pageScrolling;
+
+  @override
+  void initState() {
+    super.initState();
+    _detectCarProjection();
+  }
+
+  Future<void> _detectCarProjection() async {
+    final deviceInfo = DeviceInfoService();
+    final proj = await deviceInfo.isCarProjection();
+    if (mounted && proj) {
+      setState(() => _carProjection = true);
+    }
+  }
+
+  /// 判断当前是否为车机投屏（或近似）环境。
+  ///
+  /// 组合判断：
+  /// 1. 原生投屏检测（外接显示 / vivo 车联 / 车载 UI 模式）
+  /// 2. 宽高比特征：车机屏普遍 ~16:9（宽高比 < 2），手机横屏普遍 ≥ 2:1。
+  ///    宽高比偏矮说明很可能是车机/平板的横向投屏，底部控件易被系统栏遮挡，
+  ///    此时用分栏布局（控件在右侧）更安全。
+  bool _isCarProjection(Size size) {
+    if (_carProjection == true) return true;
+    if (size.height <= 0) return false;
+    final aspect = size.width / size.height;
+    return aspect < 1.95;
+  }
 
   @override
   void dispose() {
@@ -197,8 +227,10 @@ class _PlayerBodyState extends State<_PlayerBody> {
     }
     final landscape = size.width > size.height;
     _syncSystemUi(landscape);
-    // 横屏分栏布局是车机专属，普通横屏仍用竖屏的翻页布局。
-    final isCarLayout = landscape && ThemeController.instance.carModeEnabled;
+    // 车机投屏环境：carModeEnabled（用户设置/自动检测）或投屏检测或高度特征。
+    // 车机投屏时底部播放控件会被系统栏遮挡，需用分栏布局（控件在右侧）。
+    final isCarLayout = landscape && (ThemeController.instance.carModeEnabled ||
+        _isCarProjection(size));
 
     return StatusBarOverlay(
       brightness: Brightness.dark,

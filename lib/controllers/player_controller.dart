@@ -56,6 +56,7 @@ class PlayerController extends ChangeNotifier {
       'settings.volume_normalization_enabled';
   static const _bluetoothLyricsEnabledSettingKey =
       'settings.bluetooth_lyrics_enabled';
+  static const _carLyricsEnabledSettingKey = 'settings.car_lyrics_enabled';
   static const _queueKey = 'playback.queue';
   static const _currentSongKey = 'playback.current_song';
   static const _currentPositionKey = 'playback.current_position';
@@ -116,6 +117,7 @@ class PlayerController extends ChangeNotifier {
       _maybeSyncDesktopLyricFromPosition();
       _syncSuperLyricFromPosition();
       _syncBluetoothLyricsFromPosition();
+      _pushCarLyrics();
       notifyListeners();
     });
     // Send timing anchors; Android animates karaoke progress at display refresh.
@@ -248,6 +250,7 @@ class PlayerController extends ChangeNotifier {
   bool autoPlayOnDeviceConnected = false;
   bool volumeNormalizationEnabled = false;
   bool bluetoothLyricsEnabled = false;
+  bool carLyricsEnabled = false;
   bool desktopLyricsEnabled = false;
   DesktopLyricsSettings desktopLyricsSettings = const DesktopLyricsSettings();
   Timer? _autoResumeTimer;
@@ -398,6 +401,18 @@ class PlayerController extends ChangeNotifier {
     _lastSuperLyricPlaying = true;
     _lastBluetoothLyricIndex = -1;
     _lastBluetoothPlaying = true;
+    _lastCarLyricIndex = -2;
+    // 切歌：发 loading 状态，避免显示 "-1"，并启动周期重发
+    if (carLyricsEnabled) {
+      _audioHandler.publishCarLyrics(
+        line: '',
+        wholeLrc: '',
+        hasLyrics: false,
+        loading: true,
+        song: song,
+      );
+      _ensureCarLyricsRefresh();
+    }
     _saveQueueState();
     _startPositionSaving();
     notifyListeners();
@@ -681,6 +696,34 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// vivo 车载投屏歌词功能是否受支持（仅 Android）。
+  bool get isCarLyricsSupported => isBluetoothLyricsSupported;
+
+  /// 开关 vivo 车载投屏主页滚动歌词功能。
+  Future<void> setCarLyricsEnabled(bool enabled) async {
+    if (carLyricsEnabled == enabled) return;
+    carLyricsEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_carLyricsEnabledSettingKey, enabled);
+    if (!enabled) {
+      _carLyricsRefreshTimer?.cancel();
+      _carLyricsRefreshTimer = null;
+      if (currentSong != null) {
+        _audioHandler.publishCarLyrics(
+          line: '',
+          wholeLrc: '',
+          hasLyrics: false,
+          loading: false,
+          song: currentSong,
+        );
+      }
+    } else if (currentSong != null) {
+      _pushCarLyrics(force: true);
+      _ensureCarLyricsRefresh();
+    }
+    notifyListeners();
+  }
+
   /// 车载蓝牙歌词功能是否受支持（仅 Android）。
   bool get isBluetoothLyricsSupported => BluetoothLyricsService.isSupportedPlatform;
 
@@ -928,6 +971,9 @@ class PlayerController extends ChangeNotifier {
     }
     if (currentSong?.hash == song.hash) {
       _syncDesktopLyrics();
+      // 歌词就绪：立即推送整首 LRC 并启动周期重发
+      _pushCarLyrics(force: true);
+      _ensureCarLyricsRefresh();
     }
   }
 
@@ -1550,6 +1596,59 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
+  // ---- vivo 智能车载投屏主页滚动歌词 ----
+  int _lastCarLyricIndex = -2; // -2 表示初始未同步状态
+  Timer? _carLyricsRefreshTimer;
+
+  /// 强制重新推送车载歌词（歌词就绪或切歌时调用）
+  void _pushCarLyrics({bool force = false}) {
+    if (!carLyricsEnabled) return;
+    // 歌词未就绪或无歌词数据时，不推送整首
+    if (lyrics.isEmpty) return;
+    final index = activeLyricIndex;
+    if (!force && index == _lastCarLyricIndex) return;
+    _lastCarLyricIndex = index;
+    final currentLine = lyrics.isNotEmpty && index >= 0
+        ? lyrics[index.clamp(0, lyrics.length - 1)].text
+        : '';
+    final wholeLrc = _lyricsToLrc();
+    _audioHandler.publishCarLyrics(
+      line: currentLine,
+      wholeLrc: wholeLrc,
+      hasLyrics: true,
+      loading: false,
+      song: currentSong,
+    );
+  }
+
+  /// 启动周期重发，对抗 audio_service 用 MediaItem 重建覆盖
+  void _ensureCarLyricsRefresh() {
+    if (!carLyricsEnabled) return;
+    _carLyricsRefreshTimer?.cancel();
+    // 低频兜底重发：防止 audio_service 其他路径重建 metadata 时丢失歌词字段。
+    // 频率不宜过高（频繁 onMetadataChanged 会让车机 UI 状态重置回单行）。
+    _carLyricsRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (lyrics.isEmpty) return;
+      _pushCarLyrics(force: true);
+    });
+  }
+
+  /// 将歌词列表转换为 LRC 格式字符串
+  String _lyricsToLrc() {
+    if (lyrics.isEmpty) return '';
+    final buf = StringBuffer();
+    for (final line in lyrics) {
+      if (line.text.trim().isEmpty) continue;
+      final ms = line.time.inMilliseconds;
+      final m = (ms ~/ 60000).clamp(0, 99);
+      final s = ((ms % 60000) ~/ 1000).clamp(0, 59);
+      final cs = ((ms % 1000) ~/ 10).clamp(0, 99);
+      buf.write('[${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}.${cs.toString().padLeft(2, '0')}]');
+      buf.writeln(line.text);
+    }
+    return buf.toString();
+  }
+
   void _syncDesktopKaraokeProgress() {
     if (!_shouldShowDesktopLyrics || lyrics.isEmpty) return;
     final index = activeLyricIndex;
@@ -1779,6 +1878,8 @@ class PlayerController extends ChangeNotifier {
     bluetoothLyricsEnabled =
         prefs.getBool(_bluetoothLyricsEnabledSettingKey) ??
             bluetoothLyricsEnabled;
+    carLyricsEnabled =
+        prefs.getBool(_carLyricsEnabledSettingKey) ?? carLyricsEnabled;
     playbackSpeed = prefs.getDouble(_playbackSpeedSettingKey) ?? playbackSpeed;
     desktopLyricsEnabled =
         prefs.getBool(_desktopLyricsEnabledSettingKey) ?? desktopLyricsEnabled;
@@ -2095,6 +2196,7 @@ class PlayerController extends ChangeNotifier {
     _becomingNoisySub?.cancel();
     _devicesSub?.cancel();
     _completionFallbackTimer?.cancel();
+    _carLyricsRefreshTimer?.cancel();
     unawaited(
       _audioEffects.configureEqualizer(
         audioSessionId:

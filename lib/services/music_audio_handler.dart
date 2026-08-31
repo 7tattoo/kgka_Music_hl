@@ -141,6 +141,52 @@ class MusicAudioHandler extends BaseAudioHandler
     await audioPlayer.dispose();
   }
 
+  /// 发布车载歌词（让 audio_service 把歌词写进 metadata / extras）
+  /// [line] 当前行歌词；[wholeLrc] 完整LRC；[hasLyrics] 是否有；
+  /// [loading] 歌词是否加载中（切歌后）
+  void publishCarLyrics({
+    required String line,
+    required String wholeLrc,
+    required bool hasLyrics,
+    required bool loading,
+    Song? song,
+  }) {
+    final current = mediaItem.valueOrNull;
+    if (current == null) return;
+    final songTitle = song?.title ?? current.title;
+    final songArtist = song?.artist ?? current.artist;
+    final baseExtras = Map<String, dynamic>.from(current.extras ?? {});
+    baseExtras['hash'] = song?.hash ?? baseExtras['hash'] ?? '';
+    baseExtras['songId'] = song?.id ?? baseExtras['songId'] ?? '';
+
+    if (!loading) {
+      baseExtras['ucar.media.metadata.LYRICS_LINE'] = line;
+      baseExtras['ucar.media.metadata.LYRICS_WHOLE'] =
+          (hasLyrics && wholeLrc.isNotEmpty) ? wholeLrc : '-1';
+      baseExtras['ucar.media.metadata.LYRICS_STATUS'] = hasLyrics ? 0 : 1;
+    } else {
+      baseExtras['ucar.media.metadata.LYRICS_LINE'] = '';
+      baseExtras['ucar.media.metadata.LYRICS_WHOLE'] = '';
+      baseExtras['ucar.media.metadata.LYRICS_STATUS'] = 2; // loading
+    }
+
+    baseExtras['UCAR_TITLE'] = song?.title ?? current.title;
+    baseExtras['UCAR_ARTIST'] = song?.artist ?? current.artist;
+
+    mediaItem.add(MediaItem(
+      id: current.id,
+      album: current.album,
+      title: songTitle,
+      artist: songArtist,
+      duration: current.duration,
+      artUri: current.artUri,
+      displayTitle: current.displayTitle,
+      displaySubtitle: current.displaySubtitle,
+      displayDescription: current.displayDescription,
+      extras: baseExtras,
+    ));
+  }
+
   MediaItem _mediaItemFor(Song song) {
     return MediaItem(
       id: song.hash.isEmpty ? song.id : song.hash,
@@ -149,7 +195,14 @@ class MusicAudioHandler extends BaseAudioHandler
       artist: song.artist,
       duration: song.duration,
       artUri: song.coverUrl == null ? null : Uri.tryParse(song.coverUrl!),
-      extras: {'hash': song.hash, 'songId': song.id},
+      extras: {
+        'hash': song.hash,
+        'songId': song.id,
+        // 车载歌词字段：通过 MediaItem.extras 让 audio_service 写入 metadata
+        'ucar.media.metadata.LYRICS_LINE': '',
+        'ucar.media.metadata.LYRICS_WHOLE': '',
+        'ucar.media.metadata.LYRICS_STATUS': 2, // loading
+      },
     );
   }
 
