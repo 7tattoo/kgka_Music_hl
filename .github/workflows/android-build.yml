@@ -18,6 +18,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # 图标等二进制资源已从 git-lfs 转为普通 Git 对象（见 .gitattributes），
+          # 无需 lfs: true。若将来重新引入 LFS，务必在此打开，否则 aapt2 会因
+          # 读到 LFS 指针文本而报 "file failed to compile"。
+          lfs: false
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -31,13 +36,31 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Verify image assets are real binaries (not LFS pointers)
+        shell: bash
+        run: |
+          # 提前失败优于在 aapt2 阶段才发现：任何图片若是 LFS 指针文本，
+          # 说明 checkout 配置或 .gitattributes 出了问题。
+          bad=0
+          while IFS= read -r f; do
+            if head -c 45 "$f" | grep -q 'git-lfs.github.com/spec'; then
+              echo "::error file=$f::still a git-lfs pointer, not real image data"
+              bad=1
+            fi
+          done < <(find . -path ./.git -prune -o -type f \
+                     \( -name '*.png' -o -name '*.jpg' -o -name '*.ico' \) -print)
+          if [ "$bad" != "0" ]; then
+            exit 1
+          fi
+          echo "all image assets are real binaries"
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Auto-increment version from tag
         shell: bash
         run: |
-          # 从 tag (v2.6.1) 提取版本号，build 号用日期+序号保证每次递增
+          # 从 tag (v3.0.1) 提取版本号，build 号用日期+序号保证每次递增
           TAG_VERSION="${GITHUB_REF_NAME#v}"
           if [[ -z "$TAG_VERSION" || "$TAG_VERSION" == "$GITHUB_REF_NAME" ]]; then
             # workflow_dispatch 或非 v 前缀，用当前 pubspec 版本
