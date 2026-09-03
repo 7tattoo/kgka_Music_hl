@@ -80,9 +80,16 @@ jobs:
         shell: bash
         run: |
           PACKAGE="${{ matrix.package }}"
-          # 替换 build.gradle.kts 中的 namespace 和 applicationId
+          # build.gradle.kts：namespace + applicationId
           sed -i "s/^    namespace = \"com.tencent.wecarflow\"/    namespace = \"${PACKAGE}\"/" android/app/build.gradle.kts
           sed -i "s/^        applicationId = \"com.tencent.wecarflow\"/        applicationId = \"${PACKAGE}\"/" android/app/build.gradle.kts
+          # Kotlin 文件：package 声明必须与 namespace 一致，否则 R 类无法解析
+          # （AGP 按 namespace 生成 R 类，但源文件的 package 决定 R 的查找路径）
+          find android/app/src/main/kotlin/com/tencent/wecarflow -name '*.kt' -exec \
+            sed -i "s|^package com\.tencent\.wecarflow|package ${PACKAGE}|" {} +
+          # 布局文件：KaraokeTextView 的全限定类名必须与 Kotlin 文件的新包名同步
+          sed -i "s|com\.tencent\.wecarflow\.KaraokeTextView|${PACKAGE}.KaraokeTextView|g" \
+            android/app/src/main/res/layout/overlay_lyrics.xml
           echo "Package: ${PACKAGE}"
 
       - name: Build APK
