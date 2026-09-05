@@ -45,6 +45,7 @@ class MainActivity : AudioServiceActivity() {
         private const val REQUEST_READ_AUDIO = 1001
         private const val TAG_SUPER_LYRIC = "SuperLyricPublisher"
         private const val TAG_BLUETOOTH_LYRICS = "BluetoothLyrics"
+        private const val TAG_CAR_LYRICS = "CarAtomicLyrics"
     }
 
     private val lyricsStateReceiver = object : BroadcastReceiver() {
@@ -592,6 +593,71 @@ class MainActivity : AudioServiceActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+
+        // vivo 原子随身听（vivomusicmix）lrc_change 事件
+        val carLyricChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "kgka_music_hl/car_lyrics"
+        )
+        carLyricChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pushAtomicLyrics" -> {
+                    runCatching {
+                        val lyric = call.argument<String>("lyric") ?: ""
+                        val mediaId = call.argument<String>("mediaId") ?: ""
+                        if (lyric.isEmpty()) {
+                            result.success(false)
+                        } else {
+                            val ok = pushVivoAtomicLyrics(lyric, mediaId)
+                            result.success(ok)
+                        }
+                    }.onFailure { error ->
+                        Log.w(TAG_CAR_LYRICS, "pushAtomicLyrics failed: ${error.message}")
+                        result.success(false)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    /// 通过反射取 audio_service 的 MediaSessionCompat，发送 vivomusicmix lrc_change 事件。
+    /// audio_service 0.18.x 未通过 Dart 暴露 setExtras，故此处反射
+    /// com.ryanheise.audioservice.AudioService.instance.mediaSession 后调用其 public setExtras。
+    private fun pushVivoAtomicLyrics(wholeLrc: String, mediaId: String): Boolean {
+        return try {
+            val serviceClass = Class.forName("com.ryanheise.audioservice.AudioService")
+            val instanceField = serviceClass.getDeclaredField("instance")
+            instanceField.isAccessible = true
+            val serviceInstance = instanceField.get(null)
+            if (serviceInstance == null) {
+                Log.w(TAG_CAR_LYRICS, "AudioService.instance is null")
+                return false
+            }
+            val sessionField = serviceClass.getDeclaredField("mediaSession")
+            sessionField.isAccessible = true
+            val mediaSession = sessionField.get(serviceInstance)
+            if (mediaSession == null) {
+                Log.w(TAG_CAR_LYRICS, "mediaSession is null")
+                return false
+            }
+            // vivo 官方拼写错误（meida / meidia_id）必须照抄，写成正确拼写反而收不到
+            val extras = Bundle().apply {
+                putString(
+                    "vivomusicmix.meida.extra.key.action",
+                    "vivomusicmix.extra.lrc_change"
+                )
+                putString("vivomusicmix.extra.key.lyric", wholeLrc)
+                putString("vivomusicmix.extra.key.meidia_id", mediaId)
+            }
+            val setExtras = mediaSession.javaClass.getMethod("setExtras", Bundle::class.java)
+            setExtras.invoke(mediaSession, extras)
+            Log.d(TAG_CAR_LYRICS, "lrc_change sent: mediaId=$mediaId, lrc.len=${wholeLrc.length}")
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG_CAR_LYRICS, "pushVivoAtomicLyrics error: ${t.message}")
+            false
         }
     }
 
