@@ -17,6 +17,7 @@ import '../services/desktop_lyrics_service.dart';
 import '../services/music_api.dart';
 import '../services/music_audio_handler.dart';
 import '../services/bluetooth_lyrics_service.dart';
+import '../services/car_lyrics_service.dart';
 import '../services/playback_history_service.dart';
 import '../services/playback_stats_service.dart';
 import '../services/super_lyric_service.dart';
@@ -174,6 +175,7 @@ class PlayerController extends ChangeNotifier {
   final PlaybackStatsService _statsService = PlaybackStatsService();
   final SuperLyricService _superLyric = SuperLyricService();
   final BluetoothLyricsService _bluetoothLyrics = BluetoothLyricsService();
+  final CarLyricsService _carLyrics = CarLyricsService();
 
   AudioPlayer get audioPlayer => _audioHandler.audioPlayer;
 
@@ -402,6 +404,8 @@ class PlayerController extends ChangeNotifier {
     _lastBluetoothLyricIndex = -1;
     _lastBluetoothPlaying = true;
     _lastCarLyricIndex = -2;
+    _lastAtomicMediaId = '';
+    _lastAtomicPushAt = null;
     // 切歌：发 loading 状态，避免显示 "-1"，并启动周期重发
     if (carLyricsEnabled) {
       _audioHandler.publishCarLyrics(
@@ -1600,6 +1604,37 @@ class PlayerController extends ChangeNotifier {
   int _lastCarLyricIndex = -2; // -2 表示初始未同步状态
   Timer? _carLyricsRefreshTimer;
 
+  // ---- vivo 原子随身听（vivomusicmix）通知歌词 ----
+  /// 原子随身听重发节流间隔。原子组件只需整段 LRC，
+  /// 过于频繁的 setExtras 会导致组件侧歌词状态重置，故低频兜底重发。
+  static const _atomicLyricsThrottle = Duration(seconds: 25);
+  String _lastAtomicMediaId = '';
+  DateTime? _lastAtomicPushAt;
+
+  /// 当前曲目的公开 MEDIA_ID（与 MediaItem.id 保持一致）。
+  String _mediaIdFor(Song song) => song.hash.isEmpty ? song.id : song.hash;
+
+  /// 推送整段 LRC 给 vivo 原子随身听（切歌首次必发，之后按节流兜底重发）。
+  void _pushAtomicLyrics(String wholeLrc, {bool force = false}) {
+    if (!carLyricsEnabled) return;
+    if (!CarLyricsService.isSupportedPlatform) return;
+    if (wholeLrc.isEmpty) return;
+    final song = currentSong;
+    if (song == null) return;
+    final mediaId = _mediaIdFor(song);
+    final now = DateTime.now();
+    final songChanged = mediaId != _lastAtomicMediaId;
+    if (!force && !songChanged) {
+      final last = _lastAtomicPushAt;
+      if (last != null && now.difference(last) < _atomicLyricsThrottle) return;
+    }
+    _lastAtomicMediaId = mediaId;
+    _lastAtomicPushAt = now;
+    unawaited(
+      _carLyrics.pushAtomicLyrics(wholeLrc: wholeLrc, mediaId: mediaId),
+    );
+  }
+
   /// 强制重新推送车载歌词（歌词就绪或切歌时调用）
   void _pushCarLyrics({bool force = false}) {
     if (!carLyricsEnabled) return;
@@ -1619,6 +1654,8 @@ class PlayerController extends ChangeNotifier {
       loading: false,
       song: currentSong,
     );
+    // 同一份整段 LRC 同时喂给原子随身听（内部按 mediaId + 25s 节流）。
+    _pushAtomicLyrics(wholeLrc);
   }
 
   /// 启动周期重发，对抗 audio_service 用 MediaItem 重建覆盖
@@ -1633,9 +1670,22 @@ class PlayerController extends ChangeNotifier {
     });
   }
 
-  /// 将歌词列表转换为 LRC 格式字符串
+  // 整段 LRC 缓存：_pushCarLyrics 在播放位置回调（热路径）里被调用，
+  // 每次重新拼接整首歌词会带来无谓的字符串分配与 GC 压力。
+  //
+  // 缓存键用 lyrics 列表实例本身（identical）而不是 hash/长度等摘要：
+  // lyrics 全程只被整体替换、不做原地修改，所以"同一个实例"就等价于
+  // "同一份歌词"。若改用摘要，缓存命中的旧歌词被同长度的新歌词
+  // （如网络返回的修订版 / 带翻译版）替换时会继续复用旧 LRC。
+  String _cachedLrc = '';
+  List<LyricLine>? _cachedLrcSource;
+
+  /// 将歌词列表转换为 LRC 格式字符串（同一份歌词只拼一次）
   String _lyricsToLrc() {
     if (lyrics.isEmpty) return '';
+    if (identical(_cachedLrcSource, lyrics) && _cachedLrc.isNotEmpty) {
+      return _cachedLrc;
+    }
     final buf = StringBuffer();
     for (final line in lyrics) {
       if (line.text.trim().isEmpty) continue;
@@ -1646,7 +1696,9 @@ class PlayerController extends ChangeNotifier {
       buf.write('[${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}.${cs.toString().padLeft(2, '0')}]');
       buf.writeln(line.text);
     }
-    return buf.toString();
+    _cachedLrc = buf.toString();
+    _cachedLrcSource = lyrics;
+    return _cachedLrc;
   }
 
   void _syncDesktopKaraokeProgress() {

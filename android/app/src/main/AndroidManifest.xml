@@ -47,6 +47,8 @@
             tools:ignore="Instantiatable">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
+                <!-- vivo 原子随身听（vivomusicmix）识别本 App 所需的 action -->
+                <action android:name="com.vivo.musicwidgetmix.support.service" />
             </intent-filter>
         </service>
         <receiver

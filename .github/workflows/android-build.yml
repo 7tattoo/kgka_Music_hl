@@ -17,6 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         package:
+          - com.tencent.wecarflow
           - com.tencent.ibg.joox
           - com.spotify.music
           - com.apple.android.music
