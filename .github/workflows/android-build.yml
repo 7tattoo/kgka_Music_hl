@@ -97,12 +97,19 @@ jobs:
         run: flutter build apk --release
 
       - name: Rename APK
+        shell: bash
+        env:
+          # 经 env 传入而非直接内联 ${{ }}，避免 ref 名进入 shell 造成表达式注入
+          PACKAGE: ${{ matrix.package }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          PACKAGE="${{ matrix.package }}"
           # 将 com.xxx.yyy 转为 com-xxx-yyy
-          PKG_NAME=$(echo "${PACKAGE}" | tr '.' '-')
-          cp build/app/outputs/flutter-apk/app-release.apk kgka_Music_${PKG_NAME}-${{ github.ref_name }}.apk
-          echo "Output: kgka_Music_${PKG_NAME}-${{ github.ref_name }}.apk"
+          PKG_NAME="${PACKAGE//./-}"
+          # workflow_dispatch 在分支上跑时 ref_name 形如 feat/xxx，
+          # 斜杠会被 cp 当成目录层级导致 "No such file or directory"，故一并替换
+          SAFE_REF="${REF_NAME//\//-}"
+          cp build/app/outputs/flutter-apk/app-release.apk "kgka_Music_${PKG_NAME}-${SAFE_REF}.apk"
+          echo "Output: kgka_Music_${PKG_NAME}-${SAFE_REF}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
